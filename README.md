@@ -45,6 +45,13 @@ mvn package
 java -jar target/infimg-1.0-jar-with-dependencies.jar [optional-image-file]
 ```
 
+Sample start scripts (assume `java` is on `PATH`, resolve the jar relative
+to their own location, so they work from anywhere):
+
+- `scripts/infimg.sh` — Linux
+- `scripts/infimg.command` — macOS (double-click in Finder)
+- `scripts/infimg.bat` — Windows
+
 ## Dependencies
 
 Just `jackson-databind`, used only to read/write the small window-bounds
