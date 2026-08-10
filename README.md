@@ -42,7 +42,7 @@ at an image and maybe straighten it."
 
 ```bash
 mvn package
-java -jar target/infimg-1.0-jar-with-dependencies.jar [optional-image-file]
+java -jar target/infimg-1.1-jar-with-dependencies.jar [optional-image-file]
 ```
 
 Sample start scripts (assume `java` is on `PATH`, resolve the jar relative
@@ -69,3 +69,15 @@ config file. Everything else is JDK Swing/AWT/`ImageIO`.
 Extracted 2026-08-10 from a Voynich manuscript research project, where it
 started as a "show me something" tool for pulling traced page regions up
 on screen. General-purpose, no dependency on that project.
+
+### Changelog
+
+- **v1.1.0** — Clipboard **Paste**/**Copy** buttons alongside Load/Save.
+  Fixed the rotate/zoom pivot drifting off to wherever the image had been
+  panned to (it's now pinned to the true viewport center regardless of
+  pan). Copy renders as opaque RGB, not ARGB, avoiding a JDK Linux/X11 bug
+  where the clipboard manager's PNG round-trip (which keeps clipboard data
+  available after this process exits) can't be read back via
+  `imageFlavor` for images carrying an (always-opaque-anyway) alpha
+  channel.
+- **v1.0.0** — Initial release.
