@@ -55,6 +55,15 @@ import javax.swing.SwingUtilities;
  * Jackson's databind module (used only to read/write the tiny window-bounds
  * config below). An optional first CLI argument opens that file on launch.
  * </p>
+ * <p>
+ * The title bar always names what's on screen — the loaded file's bare name
+ * ({@link #load}), never a full path (callers, e.g. Voynich's
+ * {@code CatalogCli extract --view}, often pass long {@code /tmp} paths that
+ * would be unreadable truncated in a title bar), or, for a clipboard paste
+ * with no source file at all ({@link #pasteFromClipboard}), {@code "(clip)"}
+ * plus a millisecond timestamp — needed to tell apart multiple clipboard
+ * grabs open side by side, which would otherwise all read "ImageView".
+ * </p>
  */
 public final class ImageView extends JFrame {
 
@@ -229,6 +238,7 @@ public final class ImageView extends JFrame {
                 return;
             }
             canvas.setImage(img);
+            setTitle(file.getName());
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Load failed", JOptionPane.ERROR_MESSAGE);
         }
@@ -286,6 +296,7 @@ public final class ImageView extends JFrame {
             g.drawImage(img, 0, 0, null);
             g.dispose();
             canvas.setImage(buffered);
+            setTitle(String.format("(clip) %tH:%<tM:%<tS.%<tL", System.currentTimeMillis()));
         } catch (UnsupportedFlavorException | IOException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Paste failed", JOptionPane.ERROR_MESSAGE);
         }
