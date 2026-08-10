@@ -52,6 +52,13 @@ to their own location, so they work from anywhere):
 - `scripts/infimg.command` — macOS (double-click in Finder)
 - `scripts/infimg.bat` — Windows
 
+## CI / Releases
+
+Every push builds the jar (`.github/workflows/build.yml`) and uploads it
+as a build artifact. Pushing a tag matching `v*.*.*` (e.g. `v1.0.0`)
+additionally builds and publishes a GitHub Release with the fat jar
+attached (`.github/workflows/release.yml`).
+
 ## Dependencies
 
 Just `jackson-databind`, used only to read/write the small window-bounds
