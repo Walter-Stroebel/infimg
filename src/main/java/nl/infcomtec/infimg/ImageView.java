@@ -318,7 +318,7 @@ public final class ImageView extends JFrame {
         moreContrast.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                applyAdjustmentAsync(ImageView::adjustContrast, +CONTRAST_STEP);
+                applyAdjustmentAsync(new ContrastStep(), +CONTRAST_STEP);
             }
         });
         menu.add(moreContrast);
@@ -327,7 +327,7 @@ public final class ImageView extends JFrame {
         lessContrast.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                applyAdjustmentAsync(ImageView::adjustContrast, -CONTRAST_STEP);
+                applyAdjustmentAsync(new ContrastStep(), -CONTRAST_STEP);
             }
         });
         menu.add(lessContrast);
@@ -415,7 +415,7 @@ public final class ImageView extends JFrame {
         item.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                applyAdjustmentAsync(ImageView::adjustBrightness, deltaL);
+                applyAdjustmentAsync(new BrightnessStep(), deltaL);
             }
         });
         return item;
@@ -425,6 +425,34 @@ public final class ImageView extends JFrame {
     private interface LabStep {
 
         void apply(double[] lab, double step);
+    }
+
+    /** Adds {@code step} (an L* offset in points) to L*, clamped 0..100 — the "Lighter"/"Darker" operation. */
+    private static final class BrightnessStep implements LabStep {
+
+        @Override
+        public void apply(double[] lab, double step) {
+            lab[0] = Math.max(0, Math.min(100, lab[0] + step));
+        }
+    }
+
+    /**
+     * Pushes L* through a logistic S-curve centered on middle grey
+     * (L*=50), steepened or flattened by {@code step} — the "More/Less
+     * Contrast" operation. Unlike a naive RGB contrast stretch, this
+     * spreads/compresses perceptual lightness around a fixed pivot rather
+     * than raw channel values, so color balance doesn't shift as a side
+     * effect of the contrast change.
+     */
+    private static final class ContrastStep implements LabStep {
+
+        @Override
+        public void apply(double[] lab, double step) {
+            double normalized = (lab[0] - 50) / 50;
+            double k = Math.max(0.05, 1.0 + step);
+            double sigmoid = 1.0 / (1.0 + Math.exp(-k * normalized * 3)) * 2 - 1;
+            lab[0] = Math.max(0, Math.min(100, 50 + sigmoid * 50));
+        }
     }
 
     /**
@@ -449,26 +477,6 @@ public final class ImageView extends JFrame {
                 });
             }
         }, "infimg-adjust").start();
-    }
-
-    /** Adds {@code step} (an L* offset in points) to L*, clamped 0..100 — the "Lighter"/"Darker" operation. */
-    private static void adjustBrightness(double[] lab, double step) {
-        lab[0] = Math.max(0, Math.min(100, lab[0] + step));
-    }
-
-    /**
-     * Pushes L* through a logistic S-curve centered on middle grey
-     * (L*=50), steepened or flattened by {@code step} — the "More/Less
-     * Contrast" operation. Unlike a naive RGB contrast stretch, this
-     * spreads/compresses perceptual lightness around a fixed pivot rather
-     * than raw channel values, so color balance doesn't shift as a side
-     * effect of the contrast change.
-     */
-    private static void adjustContrast(double[] lab, double step) {
-        double normalized = (lab[0] - 50) / 50;
-        double k = Math.max(0.05, 1.0 + step);
-        double sigmoid = 1.0 / (1.0 + Math.exp(-k * normalized * 3)) * 2 - 1;
-        lab[0] = Math.max(0, Math.min(100, 50 + sigmoid * 50));
     }
 
     /**
