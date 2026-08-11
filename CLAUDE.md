@@ -43,7 +43,7 @@ tool, flip a switch in Menu") and is the template for any future one.
 ## Build and Run
 ```bash
 mvn package
-java -jar target/infimg-1.1-jar-with-dependencies.jar [-0..-9] [optional-image-file]
+java -jar target/infimg-1.2-jar-with-dependencies.jar [-0..-9] [optional-image-file]
 ```
 There are no automated tests — this is a team of two (Walter plus this
 assistant) with a tight manual-verify loop (see Feedback memory

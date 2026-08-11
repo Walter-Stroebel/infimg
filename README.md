@@ -50,7 +50,7 @@ at an image and maybe straighten it."
 
 ```bash
 mvn package
-java -jar target/infimg-1.1-jar-with-dependencies.jar [-0..-9] [optional-image-file]
+java -jar target/infimg-1.2-jar-with-dependencies.jar [-0..-9] [optional-image-file]
 ```
 
 Sample start scripts (assume `java` is on `PATH`, resolve the jar relative
@@ -85,7 +85,7 @@ Full feature-by-feature reference, including the config file format:
 
 ### Changelog
 
-- **Unreleased** — Added a **Menu** button (keeps the main toolbar simple
+- **v1.2.0** — Added a **Menu** button (keeps the main toolbar simple
   while leaving room to grow) with **Load Slot**/**Save as Slot**
   submenus over 10 remembered window-position slots, selectable at launch
   with `-0` through `-9`. Promoting the current geometry into a new slot
