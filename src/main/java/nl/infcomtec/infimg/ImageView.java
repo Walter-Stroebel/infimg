@@ -37,7 +37,10 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JPopupMenu;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
@@ -73,20 +76,75 @@ public final class ImageView extends JFrame {
     private final ImageCanvas canvas = new ImageCanvas();
 
     public static void main(String[] args) {
+        int slot = 0;
+        File fileArg = null;
+        for (String arg : args) {
+            if (arg.length() == 2 && arg.charAt(0) == '-' && Character.isDigit(arg.charAt(1))) {
+                slot = arg.charAt(1) - '0';
+            } else {
+                fileArg = new File(arg);
+            }
+        }
+        final int startSlot = slot;
+        final File toLoad = fileArg;
+        applyLookAndFeel(readStoredLaf());
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
-                ImageView view = new ImageView();
+                ImageView view = new ImageView(startSlot);
                 view.setVisible(true);
-                if (args.length > 0) {
-                    view.load(new File(args[0]));
+                if (null != toLoad) {
+                    view.load(toLoad);
                 }
             }
         });
     }
 
-    public ImageView() {
+    /** Look-and-feel names {@link #applyLookAndFeel} understands; also what Menu → Look & Feel lists. */
+    private static final String[] LAF_NAMES = {"System Default", "FlatLaf Light", "FlatLaf Dark", "FlatLaf IntelliJ", "FlatLaf Darcula"};
+
+    private static String readStoredLaf() {
+        if (!CONFIG_FILE.isFile()) {
+            return LAF_NAMES[0];
+        }
+        try {
+            AppConfig cfg = MAPPER.readValue(CONFIG_FILE, AppConfig.class);
+            return null == cfg.laf ? LAF_NAMES[0] : cfg.laf;
+        } catch (IOException ex) {
+            return LAF_NAMES[0];
+        }
+    }
+
+    /** Installs the named look-and-feel (see {@link #LAF_NAMES}); must run before any Swing component is created. */
+    private static void applyLookAndFeel(String name) {
+        try {
+            switch (name) {
+                case "FlatLaf Light":
+                    javax.swing.UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatLightLaf());
+                    break;
+                case "FlatLaf Dark":
+                    javax.swing.UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatDarkLaf());
+                    break;
+                case "FlatLaf IntelliJ":
+                    javax.swing.UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatIntelliJLaf());
+                    break;
+                case "FlatLaf Darcula":
+                    javax.swing.UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatDarculaLaf());
+                    break;
+                default:
+                    javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName());
+            }
+        } catch (ReflectiveOperationException | javax.swing.UnsupportedLookAndFeelException ex) {
+            Logger.getLogger(ImageView.class.getName()).log(Level.WARNING, "Could not apply look and feel " + name, ex);
+        }
+    }
+
+    /** Which of the 10 remembered window-position slots this instance tracks on move/resize. */
+    private int activeSlot;
+
+    public ImageView(int startSlot) {
         super("ImageView");
+        this.activeSlot = startSlot;
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         JToolBar toolBar = new JToolBar();
@@ -159,6 +217,16 @@ public final class ImageView extends JFrame {
 
         toolBar.add(Box.createHorizontalGlue());
 
+        final JButton menuButton = new JButton("Menu");
+        menuButton.setToolTipText("More features, tucked away so the main toolbar stays simple");
+        menuButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                buildMenu().show(menuButton, 0, menuButton.getHeight());
+            }
+        });
+        toolBar.add(menuButton);
+
         JButton exitButton = new JButton("Exit");
         exitButton.setToolTipText("Close this viewer — no unsaved-changes prompt, use Save first if you want this exact view kept");
         exitButton.addActionListener(new ActionListener() {
@@ -173,9 +241,10 @@ public final class ImageView extends JFrame {
         add(toolBar, BorderLayout.NORTH);
         add(canvas, BorderLayout.CENTER);
 
-        ViewConfig cfg = loadConfig();
-        if (null != cfg && cfg.width > 0 && cfg.height > 0) {
-            setBounds(cfg.x, cfg.y, cfg.width, cfg.height);
+        AppConfig cfg = loadConfig();
+        ViewConfig slotCfg = cfg.slots[activeSlot];
+        if (null != slotCfg && slotCfg.width > 0 && slotCfg.height > 0) {
+            setBounds(slotCfg.x, slotCfg.y, slotCfg.width, slotCfg.height);
         } else {
             Dimension screen = GraphicsEnvironment.getLocalGraphicsEnvironment()
                     .getDefaultScreenDevice().getDefaultConfiguration().getBounds().getSize();
@@ -185,23 +254,309 @@ public final class ImageView extends JFrame {
         addComponentListener(new ComponentAdapter() {
             @Override
             public void componentMoved(ComponentEvent e) {
-                saveConfig();
+                saveIntoSlot(activeSlot);
             }
 
             @Override
             public void componentResized(ComponentEvent e) {
-                saveConfig();
+                saveIntoSlot(activeSlot);
             }
         });
     }
 
-    private void saveConfig() {
+    /** Builds the [Menu] popup fresh each click, so slot labels always reflect the file on disk. */
+    private JPopupMenu buildMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        AppConfig cfg = loadConfig();
+
+        JMenu loadMenu = new JMenu("Load Slot");
+        JMenu saveMenu = new JMenu("Save as Slot");
+        for (int i = 0; i < 10; i++) {
+            final int slot = i;
+            ViewConfig slotCfg = cfg.slots[slot];
+            String label = slot + (null == slotCfg ? " (empty)"
+                    : String.format(" (%dx%d @ %d,%d)", slotCfg.width, slotCfg.height, slotCfg.x, slotCfg.y));
+
+            JMenuItem loadItem = new JMenuItem(label);
+            loadItem.setEnabled(null != slotCfg);
+            loadItem.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    loadSlot(slot);
+                }
+            });
+            loadMenu.add(loadItem);
+
+            JMenuItem saveItem = new JMenuItem(label);
+            saveItem.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    saveAsSlot(slot);
+                }
+            });
+            saveMenu.add(saveItem);
+        }
+        menu.add(loadMenu);
+        menu.add(saveMenu);
+
+        menu.addSeparator();
+        JMenuItem metadataItem = new JMenuItem("Metadata (ImageMagick identify)");
+        metadataItem.setEnabled(cfg.imageMagick && null != currentFile);
+        metadataItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showMetadata();
+            }
+        });
+        menu.add(metadataItem);
+
+        boolean hasImage = null != canvas.source;
+        menu.add(adjustMenuItem("Lighter", hasImage, +BRIGHTNESS_STEP));
+        menu.add(adjustMenuItem("Darker", hasImage, -BRIGHTNESS_STEP));
+        JMenuItem moreContrast = new JMenuItem("More Contrast");
+        moreContrast.setEnabled(hasImage);
+        moreContrast.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                applyAdjustmentAsync(ImageView::adjustContrast, +CONTRAST_STEP);
+            }
+        });
+        menu.add(moreContrast);
+        JMenuItem lessContrast = new JMenuItem("Less Contrast");
+        lessContrast.setEnabled(hasImage);
+        lessContrast.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                applyAdjustmentAsync(ImageView::adjustContrast, -CONTRAST_STEP);
+            }
+        });
+        menu.add(lessContrast);
+
+        menu.addSeparator();
+        JMenu lafMenu = new JMenu("Look & Feel");
+        String currentLaf = null == cfg.laf ? LAF_NAMES[0] : cfg.laf;
+        for (final String name : LAF_NAMES) {
+            JMenuItem lafItem = new JMenuItem(name);
+            lafItem.setEnabled(!name.equals(currentLaf));
+            lafItem.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    setLookAndFeel(name);
+                }
+            });
+            lafMenu.add(lafItem);
+        }
+        menu.add(lafMenu);
+
+        return menu;
+    }
+
+    /**
+     * Applies {@code name} to the running app immediately (via
+     * {@link SwingUtilities#updateComponentTreeUI}, so no restart is
+     * needed to preview it) and persists it to {@code ~/.infimg.json} so
+     * future launches start with it already installed — {@link #main}
+     * applies the stored LAF before any Swing component exists, which
+     * this live in-session switch can't retroactively do for windows
+     * that were already built with the old one otherwise.
+     */
+    private void setLookAndFeel(String name) {
+        applyLookAndFeel(name);
+        SwingUtilities.updateComponentTreeUI(this);
+        AppConfig cfg = loadConfig();
+        cfg.laf = name;
+        writeConfig(cfg);
+    }
+
+    /** Jumps this window to slot's stored geometry and starts tracking that slot on move/resize. */
+    private void loadSlot(int slot) {
+        AppConfig cfg = loadConfig();
+        ViewConfig slotCfg = cfg.slots[slot];
+        if (null == slotCfg) {
+            return;
+        }
+        activeSlot = slot;
+        setBounds(slotCfg.x, slotCfg.y, slotCfg.width, slotCfg.height);
+    }
+
+    /**
+     * Runs {@code identify -verbose} (ImageMagick) on {@link #currentFile}
+     * and shows the raw output in a scrollable dialog — unparsed, so it
+     * works with whatever ImageMagick version is on the user's PATH.
+     * Gated in {@link #buildMenu} on the {@code imageMagick} config flag
+     * (the user's own attestation that it's installed, never auto-probed)
+     * and on having an actual file on disk (a clipboard paste has none).
+     */
+    private void showMetadata() {
+        try {
+            Process proc = new ProcessBuilder("identify", "-verbose", currentFile.getAbsolutePath())
+                    .redirectErrorStream(true).start();
+            String output = new String(proc.getInputStream().readAllBytes());
+            proc.waitFor();
+            javax.swing.JTextArea textArea = new javax.swing.JTextArea(output, 40, 100);
+            textArea.setEditable(false);
+            textArea.setCaretPosition(0);
+            JOptionPane.showMessageDialog(this, new javax.swing.JScrollPane(textArea),
+                    "Metadata — " + currentFile.getName(), JOptionPane.PLAIN_MESSAGE);
+        } catch (IOException | InterruptedException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Metadata failed", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /** L* points moved per Lighter/Darker click — small and repeatable, a nudge rather than a dial. */
+    private static final int BRIGHTNESS_STEP = 5;
+    /** Sigmoid steepness delta per More/Less Contrast click. */
+    private static final double CONTRAST_STEP = 0.15;
+
+    /** Builds a single Lighter/Darker Menu item that applies a fixed L* step immediately, no dialog. */
+    private JMenuItem adjustMenuItem(String label, boolean enabled, final int deltaL) {
+        JMenuItem item = new JMenuItem(label);
+        item.setEnabled(enabled);
+        item.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                applyAdjustmentAsync(ImageView::adjustBrightness, deltaL);
+            }
+        });
+        return item;
+    }
+
+    /** A per-pixel CIELAB adjustment: takes the current L*, a*, b* and a step amount, mutates them in place. */
+    private interface LabStep {
+
+        void apply(double[] lab, double step);
+    }
+
+    /**
+     * Runs {@code op} against {@link ImageCanvas#source} off the EDT (full
+     * sRGB↔XYZ↔Lab round trips per pixel, parallelized across all cores in
+     * {@link #mapPerPixelLab}, are real work even so) and swaps the result
+     * into the canvas — replacing it in place, not resetting, so repeated
+     * clicks (Lighter, Lighter, More Contrast, ...) compound on the
+     * current view rather than each starting over from the loaded file.
+     */
+    private void applyAdjustmentAsync(final LabStep op, final double step) {
+        final BufferedImage source = canvas.source;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final BufferedImage adjusted = mapPerPixelLab(source, op, step);
+                SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        canvas.replaceImageKeepingView(adjusted);
+                    }
+                });
+            }
+        }, "infimg-adjust").start();
+    }
+
+    /** Adds {@code step} (an L* offset in points) to L*, clamped 0..100 — the "Lighter"/"Darker" operation. */
+    private static void adjustBrightness(double[] lab, double step) {
+        lab[0] = Math.max(0, Math.min(100, lab[0] + step));
+    }
+
+    /**
+     * Pushes L* through a logistic S-curve centered on middle grey
+     * (L*=50), steepened or flattened by {@code step} — the "More/Less
+     * Contrast" operation. Unlike a naive RGB contrast stretch, this
+     * spreads/compresses perceptual lightness around a fixed pivot rather
+     * than raw channel values, so color balance doesn't shift as a side
+     * effect of the contrast change.
+     */
+    private static void adjustContrast(double[] lab, double step) {
+        double normalized = (lab[0] - 50) / 50;
+        double k = Math.max(0.05, 1.0 + step);
+        double sigmoid = 1.0 / (1.0 + Math.exp(-k * normalized * 3)) * 2 - 1;
+        lab[0] = Math.max(0, Math.min(100, 50 + sigmoid * 50));
+    }
+
+    /**
+     * Applies {@code op} to every pixel's CIELAB L*, a*, b*, converts back
+     * to sRGB, preserving alpha. Parallelized by row across all available
+     * cores — on modern multi-core hardware that's worth spending rather
+     * than falling back to naive per-channel RGB math like
+     * {@link Color#brighter} / {@link Color#darker} do.
+     */
+    private static BufferedImage mapPerPixelLab(BufferedImage src, final LabStep op, final double step) {
+        final int w = src.getWidth();
+        final int h = src.getHeight();
+        final int[] pixels = src.getRGB(0, 0, w, h, null, 0, w);
+        final BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        final int[] result = new int[pixels.length];
+        int cores = Runtime.getRuntime().availableProcessors();
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(cores);
+        java.util.List<java.util.concurrent.Future<?>> tasks = new java.util.ArrayList<>();
+        int rowsPerTask = Math.max(1, h / cores);
+        for (int startRow = 0; startRow < h; startRow += rowsPerTask) {
+            final int from = startRow;
+            final int to = Math.min(h, startRow + rowsPerTask);
+            tasks.add(pool.submit(new Runnable() {
+                @Override
+                public void run() {
+                    double[] lab = new double[3];
+                    for (int y = from; y < to; y++) {
+                        int rowOffset = y * w;
+                        for (int x = 0; x < w; x++) {
+                            int argb = pixels[rowOffset + x];
+                            int alpha = argb >>> 24;
+                            EnhancedColor.getCIELAB(argb, lab);
+                            op.apply(lab, step);
+                            EnhancedColor adjusted = EnhancedColor.fromCIELAB(lab[0], lab[1], lab[2]);
+                            result[rowOffset + x] = (alpha << 24) | (adjusted.getRGB() & 0xFFFFFF);
+                        }
+                    }
+                }
+            }));
+        }
+        for (java.util.concurrent.Future<?> task : tasks) {
+            try {
+                task.get();
+            } catch (InterruptedException | java.util.concurrent.ExecutionException ex) {
+                Thread.currentThread().interrupt();
+                Logger.getLogger(ImageView.class.getName()).log(Level.WARNING, "Adjustment task failed", ex);
+            }
+        }
+        pool.shutdown();
+        out.setRGB(0, 0, w, h, result, 0, w);
+        return out;
+    }
+
+    /**
+     * Promotes the current on-screen geometry into {@code slot} and switches
+     * live tracking to it. If this session started on slot 0 and is being
+     * promoted away from it, slot 0 is reverted to whatever it held before
+     * this session began, undoing any autosave drift picked up along the
+     * way — so the original slot-0 position survives even though this
+     * window kept overwriting it while it was still the active slot.
+     */
+    private void saveAsSlot(int slot) {
+        AppConfig cfg = loadConfig();
+        if (0 == activeSlot && slot != activeSlot) {
+            cfg.slots[0] = preSessionSlotZero;
+        }
+        cfg.slots[slot] = boundsToConfig();
+        writeConfig(cfg);
+        activeSlot = slot;
+    }
+
+    private ViewConfig boundsToConfig() {
         Rectangle b = getBounds();
         ViewConfig cfg = new ViewConfig();
         cfg.x = b.x;
         cfg.y = b.y;
         cfg.width = b.width;
         cfg.height = b.height;
+        return cfg;
+    }
+
+    private void saveIntoSlot(int slot) {
+        AppConfig cfg = loadConfig();
+        cfg.slots[slot] = boundsToConfig();
+        writeConfig(cfg);
+    }
+
+    private static void writeConfig(AppConfig cfg) {
         try {
             MAPPER.writerWithDefaultPrettyPrinter().writeValue(CONFIG_FILE, cfg);
         } catch (IOException ex) {
@@ -209,19 +564,40 @@ public final class ImageView extends JFrame {
         }
     }
 
-    private static ViewConfig loadConfig() {
-        if (!CONFIG_FILE.isFile()) {
-            return null;
+    /** Slot 0's geometry as it was when this session started (possibly null, i.e. empty), so {@link #saveAsSlot} can restore it. */
+    private ViewConfig preSessionSlotZero;
+    private boolean preSessionSlotZeroCaptured;
+
+    private AppConfig loadConfig() {
+        AppConfig cfg = new AppConfig();
+        if (CONFIG_FILE.isFile()) {
+            try {
+                AppConfig read = MAPPER.readValue(CONFIG_FILE, AppConfig.class);
+                System.arraycopy(read.slots, 0, cfg.slots, 0, Math.min(read.slots.length, 10));
+                cfg.imageMagick = read.imageMagick;
+                cfg.laf = read.laf;
+            } catch (IOException ex) {
+                Logger.getLogger(ImageView.class.getName()).log(Level.WARNING, "Could not read " + CONFIG_FILE, ex);
+            }
         }
-        try {
-            return MAPPER.readValue(CONFIG_FILE, ViewConfig.class);
-        } catch (IOException ex) {
-            Logger.getLogger(ImageView.class.getName()).log(Level.WARNING, "Could not read " + CONFIG_FILE, ex);
-            return null;
+        if (!preSessionSlotZeroCaptured) {
+            preSessionSlotZero = cfg.slots[0];
+            preSessionSlotZeroCaptured = true;
         }
+        return cfg;
     }
 
-    /** Plain POJO mirroring {@code ~/.infimg.json}'s last on-screen window bounds. */
+    /** Plain POJO mirroring {@code ~/.infimg.json}: the 10 window-position slots plus feature flags for optional external tools. */
+    public static final class AppConfig {
+
+        public ViewConfig[] slots = new ViewConfig[10];
+        /** User's own attestation that ImageMagick's {@code identify} is on PATH — never auto-probed, see MANUAL.md. */
+        public boolean imageMagick = false;
+        /** One of {@link #LAF_NAMES}; applied at startup before any Swing component is created. Null/unset means System Default. */
+        public String laf = "System Default";
+    }
+
+    /** Plain POJO mirroring one slot of {@code ~/.infimg.json}'s last on-screen window bounds. */
     public static final class ViewConfig {
 
         public int x;
@@ -229,6 +605,9 @@ public final class ImageView extends JFrame {
         public int width;
         public int height;
     }
+
+    /** Backing file of what's currently loaded, or null (e.g. after {@link #pasteFromClipboard}) — needed by menu features like Metadata that shell out to a file-based external tool. */
+    private File currentFile;
 
     private void load(File file) {
         try {
@@ -238,6 +617,7 @@ public final class ImageView extends JFrame {
                 return;
             }
             canvas.setImage(img);
+            currentFile = file;
             setTitle(file.getName());
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Load failed", JOptionPane.ERROR_MESSAGE);
@@ -296,6 +676,7 @@ public final class ImageView extends JFrame {
             g.drawImage(img, 0, 0, null);
             g.dispose();
             canvas.setImage(buffered);
+            currentFile = null;
             setTitle(String.format("(clip) %tH:%<tM:%<tS.%<tL", System.currentTimeMillis()));
         } catch (UnsupportedFlavorException | IOException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Paste failed", JOptionPane.ERROR_MESSAGE);
@@ -401,6 +782,12 @@ public final class ImageView extends JFrame {
             source = img;
             rotationDeg = 0.0;
             fitToWindow();
+        }
+
+        /** Swaps {@link #source} in place — unlike {@link #setImage}, keeps zoom/rotation/pan untouched, for pixel-adjustment previews (e.g. brightness) that shouldn't reset the user's current view. */
+        void replaceImageKeepingView(BufferedImage img) {
+            source = img;
+            repaint();
         }
 
         /**

@@ -24,25 +24,33 @@ at an image and maybe straighten it."
 
 ## Features
 
-- Fit-to-window on load — rescales up or down to exactly fill the current
-  window, no letterbox margin.
-- Mouse wheel zooms; a toolbar toggle switches the wheel to rotate through
-  an arbitrary angle instead (not just 90° steps).
-- Click-drag pan.
-- **Fit** button re-fits after a manual window resize or a wandered-off
-  zoom/pan.
-- **Save** writes exactly the current on-screen pixels — zoom, rotation,
-  pan, and crop all baked in — not a full-resolution re-render.
-- Remembers the window's last position/size across runs, in a tiny
-  `~/.infimg.json`.
-- **Exit** button closes with no "unsaved changes?" nag — nothing is ever
-  really lost, just a Save you'd have to redo.
+- Fit-to-window on load, mouse-wheel zoom or (toolbar toggle) arbitrary-angle
+  rotate, click-drag pan.
+- **Save**/**Copy** write exactly the current on-screen pixels — zoom,
+  rotation, pan, crop all baked in.
+- **Load**/**Paste** from a file or the system clipboard.
+- 10 remembered window-position slots, selectable at launch (`-0`..`-9`) —
+  lets any caller, in any language, embed infimg with "open at the user's
+  preferred position/size" for free. See [MANUAL.md](MANUAL.md).
+- A **Menu** button tucks away growing extras (window slots, optional
+  external-tool integrations like metadata viewing, look-and-feel) without
+  cluttering the main toolbar. See [MANUAL.md](MANUAL.md) for the full
+  feature reference.
+- Pick a look-and-feel — system default or [FlatLaf](https://www.formdev.com/flatlaf/)
+  Light/Dark/IntelliJ/Darcula — from Menu; applies instantly and persists.
+- **Menu → Lighter / Darker / More Contrast / Less Contrast**: one click,
+  one fixed step, no sliders or numbers — nudge until it looks right,
+  click again if it doesn't. Under the hood it's a perceptually-uniform
+  CIELAB L* shift/S-curve, not the naive per-channel sRGB scaling almost
+  every other "brighten this photo" tool (including
+  `java.awt.Color.brighter()`) actually does. Full-image recompute,
+  parallelized across every core, on every click.
 
 ## Build & run
 
 ```bash
 mvn package
-java -jar target/infimg-1.1-jar-with-dependencies.jar [optional-image-file]
+java -jar target/infimg-1.1-jar-with-dependencies.jar [-0..-9] [optional-image-file]
 ```
 
 Sample start scripts (assume `java` is on `PATH`, resolve the jar relative
@@ -61,8 +69,10 @@ attached (`.github/workflows/release.yml`).
 
 ## Dependencies
 
-Just `jackson-databind`, used only to read/write the small window-bounds
-config file. Everything else is JDK Swing/AWT/`ImageIO`.
+Just `jackson-databind`, used only to read/write the small config file.
+Everything else is JDK Swing/AWT/`ImageIO`. Some **Menu** features use
+optional external command-line tools if you tell infimg they're installed —
+see [MANUAL.md](MANUAL.md).
 
 ## Status
 
@@ -70,8 +80,30 @@ Extracted 2026-08-10 from a Voynich manuscript research project, where it
 started as a "show me something" tool for pulling traced page regions up
 on screen. General-purpose, no dependency on that project.
 
+Full feature-by-feature reference, including the config file format:
+[MANUAL.md](MANUAL.md).
+
 ### Changelog
 
+- **Unreleased** — Added a **Menu** button (keeps the main toolbar simple
+  while leaving room to grow) with **Load Slot**/**Save as Slot**
+  submenus over 10 remembered window-position slots, selectable at launch
+  with `-0` through `-9`. Promoting the current geometry into a new slot
+  while running as the default slot 0 reverts slot 0 to what it held
+  before this session started, undoing any autosave drift picked up along
+  the way. Added a **Metadata** menu item that shells out to ImageMagick's
+  `identify -verbose`, gated behind an `imageMagick` config flag the user
+  sets themselves after installing it — see MANUAL.md. Added a
+  **Look & Feel** submenu (System Default plus FlatLaf's four bundled
+  themes — Light/Dark/IntelliJ/Darcula) via a new `flatlaf` dependency;
+  switches instantly and the choice persists to `~/.infimg.json`. Added
+  **Lighter**/**Darker**/**More Contrast**/**Less Contrast** — one-click,
+  no-dialog CIELAB L* nudges (a fixed offset per click for
+  brightness, a sigmoid S-curve step for contrast), each recomputed
+  across all CPU cores. (An earlier slider-dialog version of this was
+  replaced — a numeric L* offset dialog was more control than most users
+  actually want; click-and-see repeatable nudges are simpler and just as
+  effective.)
 - **v1.1.0** — Clipboard **Paste**/**Copy** buttons alongside Load/Save.
   Fixed the rotate/zoom pivot drifting off to wherever the image had been
   panned to (it's now pinned to the true viewport center regardless of
@@ -81,3 +113,4 @@ on screen. General-purpose, no dependency on that project.
   `imageFlavor` for images carrying an (always-opaque-anyway) alpha
   channel.
 - **v1.0.0** — Initial release.
+</content>
