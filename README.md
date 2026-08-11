@@ -103,7 +103,10 @@ Full feature-by-feature reference, including the config file format:
   across all CPU cores. (An earlier slider-dialog version of this was
   replaced — a numeric L* offset dialog was more control than most users
   actually want; click-and-see repeatable nudges are simpler and just as
-  effective.)
+  effective.) The title bar now gets a trailing `*` once a pixel
+  adjustment has been made (informative only, not enforced) — zoom,
+  rotate, and pan don't count, only Lighter/Darker/More Contrast/Less
+  Contrast do.
 - **v1.1.0** — Clipboard **Paste**/**Copy** buttons alongside Load/Save.
   Fixed the rotate/zoom pivot drifting off to wherever the image had been
   panned to (it's now pinned to the true viewport center regardless of

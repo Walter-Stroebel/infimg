@@ -152,6 +152,15 @@ native Java implementation (see `EnhancedColor.getCIELAB`/`fromCIELAB` in
   to start over from scratch — there's no separate "undo."
 - View state (zoom/rotation/pan) is never touched by these — only the
   pixels change.
+- The title bar gets a trailing **`*`** the first time any of these four
+  is clicked, marking that the on-screen pixels now differ from
+  `currentFile` (or the clipboard grab that was loaded) — informative
+  only, not enforced (no unsaved-changes prompt anywhere, including on
+  Exit; Save first if you want the marked state kept). Zoom/rotate/pan
+  alone don't set it — those are just how the unchanged image is
+  currently being looked at, not a modification to it, even though Save
+  always bakes in whichever view is current regardless. Reloading clears
+  it, same as it resets everything else about the current edit.
 
 ### Look & Feel
 

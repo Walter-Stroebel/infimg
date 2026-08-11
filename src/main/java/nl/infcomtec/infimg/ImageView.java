@@ -473,6 +473,7 @@ public final class ImageView extends JFrame {
                     @Override
                     public void run() {
                         canvas.replaceImageKeepingView(adjusted);
+                        markModified();
                     }
                 });
             }
@@ -617,6 +618,31 @@ public final class ImageView extends JFrame {
     /** Backing file of what's currently loaded, or null (e.g. after {@link #pasteFromClipboard}) — needed by menu features like Metadata that shell out to a file-based external tool. */
     private File currentFile;
 
+    /** Title without any "*" (modified) marker — {@link #markModified} appends to this, never to {@link #getTitle}, so it can't accumulate multiple stars. */
+    private String baseTitle = "ImageView";
+
+    private void setBaseTitle(String title) {
+        baseTitle = title;
+        setTitle(baseTitle);
+    }
+
+    /**
+     * Marks the title with a trailing "*" — purely informative, not
+     * enforced (no unsaved-changes prompt on Exit, see the toolbar's Exit
+     * tooltip) — once the on-screen pixels differ from {@link #currentFile}
+     * (or the clipboard grab {@link #pasteFromClipboard} loaded) and Save
+     * would therefore write something new. Deliberately triggered only by
+     * pixel-level edits (Menu → Lighter/Darker/More Contrast/Less
+     * Contrast) — zoom/rotate/pan aren't "modifications" to the image
+     * itself, just how it's currently being looked at; {@link #save}
+     * bakes in whichever view is current either way.
+     */
+    private void markModified() {
+        if (!baseTitle.endsWith("*")) {
+            setTitle(baseTitle + "*");
+        }
+    }
+
     private void load(File file) {
         try {
             BufferedImage img = ImageIO.read(file);
@@ -626,7 +652,7 @@ public final class ImageView extends JFrame {
             }
             canvas.setImage(img);
             currentFile = file;
-            setTitle(file.getName());
+            setBaseTitle(file.getName());
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Load failed", JOptionPane.ERROR_MESSAGE);
         }
@@ -685,7 +711,7 @@ public final class ImageView extends JFrame {
             g.dispose();
             canvas.setImage(buffered);
             currentFile = null;
-            setTitle(String.format("(clip) %tH:%<tM:%<tS.%<tL", System.currentTimeMillis()));
+            setBaseTitle(String.format("(clip) %tH:%<tM:%<tS.%<tL", System.currentTimeMillis()));
         } catch (UnsupportedFlavorException | IOException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Paste failed", JOptionPane.ERROR_MESSAGE);
         }
