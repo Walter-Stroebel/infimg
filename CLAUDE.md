@@ -104,6 +104,34 @@ Java is a mature, complete, high-performance language on a JIT JVM at
 roughly 2x C performance. Not a slow legacy system. Write it with
 confidence in what it is.
 
+### Two Different Kinds of "New"
+Java 1.7 (2011) is this author's line for the last version whose additions
+were unambiguously good — after which the language commission's changes
+read as cargo-culting whatever C#/Rust/Go had just shipped, chasing
+brevity for its own sake rather than closing a real gap. But that's not a
+blanket "nothing after 1.7" rule, and being precise about *why* some later
+additions are fine and others aren't is what keeps this from collapsing
+into reflexive nostalgia the next time a genuinely good stdlib method
+ships.
+
+The actual distinction: **stdlib convenience vs. new syntax/inference.**
+`InputStream.readAllBytes()` (Java 9), `String.isBlank()` (Java 11) —
+these are "a library finally grew the method everyone was hand-rolling
+anyway." No new grammar to parse, nothing hidden — the call site still
+says exactly what type and method are involved. Both are used or
+acceptable in this codebase without a second thought (`readAllBytes()` is
+in `ImageView.showMetadata`).
+
+`->`/`::` (lambdas, method references), `var`, records — these buy
+brevity by deleting information the reader (human or LLM) has to
+reconstruct from context: which functional interface, which concrete
+type, which method is actually being called. That's a second grammar for
+something Java already had a perfectly good name for, not a missing
+convenience. This is why the no-lambda rule below is absolute rather than
+"avoid when it hurts readability" — the harm is structural (information
+removed from the source), not a matter of degree that trivial cases could
+be exempted from.
+
 ### Language Idiom
 Prefer explicit, named, `Object`-contract-respecting Java.
 
