@@ -12,6 +12,7 @@ Feature-by-feature reference. For the pitch and build instructions, see
 | Paste | Load whatever image is on the system clipboard. |
 | Copy | Copy exactly the current on-screen pixels to the system clipboard. |
 | Rotate (wheel) | Toggle — when down, the mouse wheel rotates the image through an arbitrary angle instead of zooming it. A live degree label (e.g. "45°") sits right next to this button, always showing the current rotation, however it got there — wheel or Menu → Rotate. |
+| Prev / Next | Step to the previous/next file among those given on the command line, in the order they were listed there. Disabled (greyed out) unless infimg was launched with more than one file. Plain navigation only — any `--rotate`/`--flip-*`/`--lighter`/etc. flags given at launch (see "Command-line arguments" below) apply once, to the first file shown, not to every file you step to. |
 | Fit | Rescale and re-center to fill the window as it is now, showing the entire image at whatever angle it's currently rotated to — for after a manual resize, a wandered-off zoom/pan, or a rotation. At an angle like 45° the image's corners swing wider than its own width/height, so Fit zooms out further there than at 0°/90° — that's correct, not a bug, since the whole rotated image genuinely takes up more on-screen room. |
 | Menu | Everything below this line. |
 | Exit | Close with no "unsaved changes?" nag — Save first if you want the current view kept. |
@@ -34,6 +35,58 @@ click again to undo it. Flip always mirrors the image as currently
 displayed, including whatever rotation is already applied — flip a
 90°-rotated photo and you get *that* image mirrored, not the original
 file's raw orientation flipped and then rotated.
+
+## Command-line arguments
+
+```
+java -jar infimg.jar [-0..-9 | --slot N] [--config PATH]
+                      [--rotate DEG] [--flip-hor] [--flip-ver]
+                      [--lighter] [--darker] [--more-contrast] [--less-contrast]
+                      [file ...]
+```
+
+- **Files**: zero, one, or many image paths. With more than one, the first
+  is shown on launch and **Prev**/**Next** (see the toolbar table above)
+  step through the rest in the order given. `find`, a shell glob, or a
+  script assembling a list all work the same way — infimg never browses a
+  directory on its own (that's the file manager's job), it only walks the
+  list it was actually handed.
+- **`-0` through `-9`** (or **`--slot N`**, the same thing spelled out):
+  which of the 10 window-position slots to open at — see "Window-position
+  slots" below. No flag defaults to slot 0.
+- **`--config PATH`**: use `PATH` instead of `~/.infimg.json` for this run
+  — window slots, the ImageMagick flag, and the Look & Feel choice are all
+  read from and written to `PATH` instead. Mainly for running more than
+  one infimg instance side by side without them fighting over the same
+  slot set (two instances sharing the default config can otherwise
+  overwrite each other's live-tracked window position).
+- **`--rotate DEG`**: set rotation to exactly `DEG` degrees (0–359,
+  free-angle — same rotation state the mouse wheel and Menu → Rotate
+  drive, just settable to an exact value from the command line). Anything
+  outside 0–359 is refused with an error and infimg exits without opening
+  a window.
+- **`--flip-hor`** / **`--flip-ver`**: same as one click of Menu → Flip
+  Horizontal / Flip Vertical.
+- **`--lighter`** / **`--darker`** / **`--more-contrast`** /
+  **`--less-contrast`**: same as one click of the matching Menu button
+  (see "Lighter / Darker / More Contrast / Less Contrast" below) — repeat
+  the flag for multiple clicks, e.g. `--lighter --lighter` for two steps.
+
+All of the adjustment/rotate/flip flags apply **once**, in the order given
+on the command line, to the first file shown — they're a scriptable
+stand-in for a few Menu clicks on the image you're about to look at, not a
+batch-processing mode. Stepping to another file with Prev/Next shows it
+exactly as loaded, with none of these flags reapplied — infimg is a
+viewer, not a batch image editor (see the project's `CLAUDE.md` "Feature
+scope" section for why that line is deliberate). Save is unaffected and
+still always writes exactly the current on-screen pixels.
+
+Example — open a scanned page pre-rotated and slightly lightened, third in
+a folder of pages so Next walks the rest:
+
+```bash
+java -jar infimg.jar --rotate 90 --lighter page03.png page04.png page05.png
+```
 
 ## The Menu button
 

@@ -71,31 +71,109 @@ import javax.swing.SwingWorker;
  */
 public final class ImageView extends JFrame {
 
-    private static final File CONFIG_FILE = new File(System.getProperty("user.home"), ".infimg.json");
+    /** Where window slots / imageMagick flag / look-and-feel are persisted — {@code ~/.infimg.json} unless {@code --config PATH} names another file, e.g. so two independently-launched instances don't share one slot set. Set once by {@link #main} before any Swing component (and so before any config read/write) exists; never reassigned after. */
+    private static File CONFIG_FILE = new File(System.getProperty("user.home"), ".infimg.json");
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final ImageCanvas canvas = new ImageCanvas();
 
+    /**
+     * One CLI-requested edit, applied once to the first file shown, in the
+     * order given on the command line — see {@link #main}'s {@code --rotate}/
+     * {@code --flip-hor}/{@code --flip-ver}/{@code --lighter}/{@code --darker}/
+     * {@code --more-contrast}/{@code --less-contrast} parsing. Deliberately
+     * not reapplied on {@link #loadNext}/{@link #loadPrevious}: infimg is a
+     * viewer, not a batch image processor (see CLAUDE.md's Feature scope
+     * section) — these flags are a scriptable stand-in for a few Menu
+     * clicks on the file you're about to look at, nothing more.
+     */
+    private interface CliOp {
+
+        void apply(ImageView view);
+    }
+
     public static void main(String[] args) {
         int slot = 0;
-        File fileArg = null;
-        for (String arg : args) {
+        final java.util.List<File> files = new java.util.ArrayList<>();
+        final java.util.List<CliOp> ops = new java.util.ArrayList<>();
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
             if (arg.length() == 2 && arg.charAt(0) == '-' && Character.isDigit(arg.charAt(1))) {
                 slot = arg.charAt(1) - '0';
+            } else if ("--slot".equals(arg)) {
+                slot = Integer.parseInt(args[++i]);
+            } else if ("--config".equals(arg)) {
+                CONFIG_FILE = new File(args[++i]);
+            } else if ("--rotate".equals(arg)) {
+                final double degrees = Double.parseDouble(args[++i]);
+                if (degrees < 0 || degrees >= 360) {
+                    System.err.println("--rotate must be 0..359, got " + degrees);
+                    System.exit(1);
+                }
+                ops.add(new CliOp() {
+                    @Override
+                    public void apply(ImageView view) {
+                        view.canvas.rotateTo(degrees);
+                    }
+                });
+            } else if ("--flip-hor".equals(arg)) {
+                ops.add(new CliOp() {
+                    @Override
+                    public void apply(ImageView view) {
+                        view.canvas.toggleFlipHorizontal();
+                    }
+                });
+            } else if ("--flip-ver".equals(arg)) {
+                ops.add(new CliOp() {
+                    @Override
+                    public void apply(ImageView view) {
+                        view.canvas.toggleFlipVertical();
+                    }
+                });
+            } else if ("--lighter".equals(arg)) {
+                ops.add(new CliOp() {
+                    @Override
+                    public void apply(ImageView view) {
+                        view.applyAdjustmentAsync(new BrightnessStep(), +BRIGHTNESS_STEP);
+                    }
+                });
+            } else if ("--darker".equals(arg)) {
+                ops.add(new CliOp() {
+                    @Override
+                    public void apply(ImageView view) {
+                        view.applyAdjustmentAsync(new BrightnessStep(), -BRIGHTNESS_STEP);
+                    }
+                });
+            } else if ("--more-contrast".equals(arg)) {
+                ops.add(new CliOp() {
+                    @Override
+                    public void apply(ImageView view) {
+                        view.applyAdjustmentAsync(new ContrastStep(), +CONTRAST_STEP);
+                    }
+                });
+            } else if ("--less-contrast".equals(arg)) {
+                ops.add(new CliOp() {
+                    @Override
+                    public void apply(ImageView view) {
+                        view.applyAdjustmentAsync(new ContrastStep(), -CONTRAST_STEP);
+                    }
+                });
             } else {
-                fileArg = new File(arg);
+                files.add(new File(arg));
             }
         }
         final int startSlot = slot;
-        final File toLoad = fileArg;
         applyLookAndFeel(readStoredLaf());
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
                 ImageView view = new ImageView(startSlot);
                 view.setVisible(true);
-                if (null != toLoad) {
-                    view.load(toLoad);
+                if (!files.isEmpty()) {
+                    view.fileList = files;
+                    view.fileIndex = 0;
+                    view.updateNavButtons();
+                    view.load(files.get(0), ops);
                 }
             }
         });
@@ -160,6 +238,18 @@ public final class ImageView extends JFrame {
 
     /** Which of the 10 remembered window-position slots this instance tracks on move/resize. */
     private int activeSlot;
+
+    /** Steps to the previous file in {@link #fileList} — enabled only past the first file. */
+    private JButton prevButton;
+
+    /** Steps to the next file in {@link #fileList} — enabled only before the last file. */
+    private JButton nextButton;
+
+    /** Enables/disables {@link #prevButton}/{@link #nextButton} per {@link #fileIndex}'s position in {@link #fileList} — called after {@link #fileList} changes and after every {@link #loadNext}/{@link #loadPrevious}. */
+    private void updateNavButtons() {
+        prevButton.setEnabled(fileIndex > 0);
+        nextButton.setEnabled(fileIndex + 1 < fileList.size());
+    }
 
     public ImageView(int startSlot) {
         super("ImageView");
@@ -237,6 +327,30 @@ public final class ImageView extends JFrame {
             }
         };
         toolBar.add(rotationLabel);
+
+        prevButton = new JButton("Prev");
+        prevButton.setToolTipText("Load the previous file from the command-line file list");
+        prevButton.setEnabled(false);
+        prevButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                loadPrevious();
+                updateNavButtons();
+            }
+        });
+        toolBar.add(prevButton);
+
+        nextButton = new JButton("Next");
+        nextButton.setToolTipText("Load the next file from the command-line file list");
+        nextButton.setEnabled(false);
+        nextButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                loadNext();
+                updateNavButtons();
+            }
+        });
+        toolBar.add(nextButton);
 
         JButton fitButton = new JButton("Fit");
         fitButton.setToolTipText("Rescale and re-center to fill the window as it is now"
@@ -809,6 +923,12 @@ public final class ImageView extends JFrame {
     /** Backing file of what's currently loaded, or null (e.g. after {@link #pasteFromClipboard}) — needed by menu features like Metadata that shell out to a file-based external tool. */
     private File currentFile;
 
+    /** Files given on the command line, in argv order — what {@link #loadNext}/{@link #loadPrevious} step through. Empty when infimg was launched with no file, or exactly one. */
+    private java.util.List<File> fileList = java.util.Collections.emptyList();
+
+    /** Index into {@link #fileList} of whatever's currently on screen. */
+    private int fileIndex;
+
     /** When {@link #currentFile} is null because the current image came from {@link #pasteFromClipboard}, the epoch-millisecond paste time — Metadata's stand-in for a last-modified timestamp, since a clipboard image has no file. Meaningless (and unread) whenever {@link #currentFile} is non-null. */
     private long pasteTimeMillis;
 
@@ -849,6 +969,11 @@ public final class ImageView extends JFrame {
      * gets applied.
      */
     private void load(final File file) {
+        load(file, java.util.Collections.<CliOp>emptyList());
+    }
+
+    /** Same as {@link #load(File)}, but runs {@code ops} once, in order, right after the image is on screen — used only by {@link #main} for the initial file's {@code --rotate}/{@code --flip-hor}/etc. flags. */
+    private void load(final File file, final java.util.List<CliOp> ops) {
         canvas.loading = true;
         canvas.repaint();
         new SwingWorker<BufferedImage, Void>() {
@@ -883,6 +1008,9 @@ public final class ImageView extends JFrame {
                     canvas.setImage(applyExifOrientation(img, orientation), exifRotationDegrees(orientation));
                     currentFile = file;
                     setBaseTitle(file.getName());
+                    for (CliOp op : ops) {
+                        op.apply(ImageView.this);
+                    }
                 } catch (java.util.concurrent.ExecutionException | InterruptedException ex) {
                     JOptionPane.showMessageDialog(ImageView.this, ex.getMessage(), "Load failed", JOptionPane.ERROR_MESSAGE);
                 } finally {
@@ -890,6 +1018,22 @@ public final class ImageView extends JFrame {
                 }
             }
         }.execute();
+    }
+
+    /** Loads {@link #fileList}{@code [}{@link #fileIndex}{@code + 1]} — the file after whatever's on screen, in the order given on the command line. No-op (button stays disabled) at the last file or when infimg wasn't launched with a file list. */
+    private void loadNext() {
+        if (fileIndex + 1 < fileList.size()) {
+            fileIndex++;
+            load(fileList.get(fileIndex));
+        }
+    }
+
+    /** Loads {@link #fileList}{@code [}{@link #fileIndex}{@code - 1]} — the file before whatever's on screen. No-op at the first file or when infimg wasn't launched with a file list. */
+    private void loadPrevious() {
+        if (fileIndex > 0) {
+            fileIndex--;
+            load(fileList.get(fileIndex));
+        }
     }
 
     /**
