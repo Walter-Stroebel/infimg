@@ -7,16 +7,33 @@ Feature-by-feature reference. For the pitch and build instructions, see
 
 | Button | Does |
 |---|---|
-| Load | Open an image file via the OS file chooser. |
+| Load | Open an image file via the OS file chooser. If the file has an EXIF orientation tag (most phone camera JPEGs do), the image is automatically rotated to display upright — matching what Nemo, Photos, and browsers already show you, rather than the raw sensor pixels. The read runs in the background, so a slow source (a NAS share has been the noticeable real case) shows a large "Loading" placeholder instead of freezing the window. |
 | Save | Write exactly the current on-screen pixels (zoom, rotation, pan, crop all baked in) to a new file. |
 | Paste | Load whatever image is on the system clipboard. |
 | Copy | Copy exactly the current on-screen pixels to the system clipboard. |
-| Rotate (wheel) | Toggle — when down, the mouse wheel rotates the image through an arbitrary angle instead of zooming it. |
-| Fit | Rescale and re-center to fill the window as it is now — for after a manual resize or a wandered-off zoom/pan. |
+| Rotate (wheel) | Toggle — when down, the mouse wheel rotates the image through an arbitrary angle instead of zooming it. A live degree label (e.g. "45°") sits right next to this button, always showing the current rotation, however it got there — wheel or Menu → Rotate. |
+| Fit | Rescale and re-center to fill the window as it is now, showing the entire image at whatever angle it's currently rotated to — for after a manual resize, a wandered-off zoom/pan, or a rotation. At an angle like 45° the image's corners swing wider than its own width/height, so Fit zooms out further there than at 0°/90° — that's correct, not a bug, since the whole rotated image genuinely takes up more on-screen room. |
 | Menu | Everything below this line. |
 | Exit | Close with no "unsaved changes?" nag — Save first if you want the current view kept. |
 
 Click-drag pans; mouse wheel zooms (or rotates, with the toggle down).
+
+**Menu → Rotate 90° / 180° / 270°** are quick exact square-ups — for
+photos or scans that just need to be turned a quarter-turn or flipped
+upside down, without needing a steady hand on the wheel to land exactly
+on the angle. Each one is **absolute**, not a nudge: clicking Rotate 90°
+always sets rotation to exactly 90°, no matter what it was before —
+clicking it twice in a row stays at 90°, it doesn't compound to 180°. It's
+the same rotation state the wheel drives, just settable to an exact value
+instead of only nudged continuously.
+
+**Menu → Flip Horizontal / Flip Vertical** mirror the image left-right or
+top-bottom — the fix for a photo taken in a mirror, or one a phone's
+camera app flipped on its own (both genuinely happen). Each is a toggle:
+click again to undo it. Flip always mirrors the image as currently
+displayed, including whatever rotation is already applied — flip a
+90°-rotated photo and you get *that* image mirrored, not the original
+file's raw orientation flipped and then rotated.
 
 ## The Menu button
 
@@ -67,19 +84,40 @@ as a real dependency, so anything more (metadata extraction, format
 conversion, etc.) rides on tools the user already has or installs
 separately.
 
-**infimg never probes for these itself.** Each optional feature is gated
-behind a boolean flag in `~/.infimg.json` that starts `false` and that
-*you* set to `true` once the underlying tool is installed and on `PATH`.
-No auto-detection code, no startup cost, no surprise external-process
-launches for tools you never asked for.
+**infimg never probes for these on its own, at startup or in the
+background.** Each optional feature is gated behind a boolean flag in
+`~/.infimg.json` that starts `false`. You turn the flag on either by
+clicking a menu item that checks for the tool right then (see below) or
+by editing the JSON file yourself — no auto-detection at launch, no
+startup cost, no surprise external-process launches for tools you never
+asked for.
 
-#### Metadata (ImageMagick)
+#### Metadata
 
-**Menu → Metadata** runs `identify -verbose <file>` on the currently
-loaded file and shows the raw output in a scrollable dialog — full EXIF,
-ICC profile, histogram, everything ImageMagick reports, unparsed.
+**Menu → Metadata** always works — for a file loaded normally, a
+clipboard paste, with or without ImageMagick installed — it just shows
+more the more of those are true. Every version starts with the same
+"usual file info" any OS file browser shows:
 
-To enable:
+- **A real file**: last modified date/time, size on disk.
+- **A clipboard paste** (no file on disk to report on): when it was
+  pasted, and the in-memory pixel buffer's raw size in bytes instead.
+
+Below that:
+
+- **Without ImageMagick, or a clipboard paste**: pixel dimensions, color
+  model, and — for a real file — the raw EXIF `Orientation` tag (see the
+  **Load** row in the main toolbar table above for the auto-rotate this
+  tag drives) — built entirely from what infimg already reads to load the
+  image, no external tool involved. (ImageMagick's `identify` has no file
+  to read for a paste, so this is what you get regardless of whether
+  ImageMagick is installed.)
+- **With ImageMagick, for a real file** (see below to enable): runs
+  `identify -verbose <file>` and shows its raw output instead — full
+  EXIF, ICC profile, histogram, everything that ImageMagick version
+  reports, unparsed.
+
+To enable the ImageMagick version:
 
 1. Install ImageMagick.
    - **Linux**: `sudo apt install imagemagick` (Debian/Ubuntu/Mint) or your
@@ -92,16 +130,16 @@ To enable:
      and make sure "Add application directory to your system PATH" is
      checked during install. Yes, this is the one platform where "just
      apt/brew install it" doesn't exist — sorry, not sorry.
-2. Confirm it's on `PATH`: `identify -version` should print a version, not
-   "command not found".
-3. Edit `~/.infimg.json` and set `"imageMagick": true`.
-4. Restart infimg (or just reopen Menu — the flag is re-read from disk
-   every time Menu is built). **Metadata** is now enabled whenever an
-   image loaded from a file (not a clipboard paste — there's no file to
-   hand `identify`) is on screen.
+2. With an image on screen, click **Menu → Detect ImageMagick**. infimg
+   runs `identify -version` once, right then, and tells you whether it
+   found it — if so, the flag is saved and **Metadata** is enabled
+   immediately, no restart needed.
 
-If you'd rather not touch JSON by hand: the file is small and obvious,
-just open it in any text editor.
+If `identify` isn't on `PATH` yet, the dialog just says so; install it and
+click **Detect ImageMagick** again. You can also skip the click and edit
+`~/.infimg.json` directly, setting `"imageMagick": true` by hand — the
+file is small and obvious, and the flag is re-read from disk every time
+Menu is built.
 
 ### Lighter / Darker / More Contrast / Less Contrast
 
@@ -177,6 +215,14 @@ future launches start with it already installed — this is also *why*
 it's a config field rather than session-only: a look-and-feel has to be
 set before any Swing component is created, which only the next process
 launch can do properly.
+
+**Default for a fresh install** (no `laf` in `~/.infimg.json` yet): System
+Default on macOS/Windows, where the native look (Aqua/Windows) is
+genuinely fine — but FlatLaf Darcula on Linux, since System Default there
+usually resolves to GTK's Swing bridge, whose widgets (the file chooser
+especially) look noticeably dated compared to FlatLaf's pure-Swing
+rendering. This only affects a config with no stored choice yet; picking
+anything via Menu always sticks, on any platform.
 
 ## Config file format
 

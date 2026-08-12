@@ -36,14 +36,16 @@ underlying feature — the CIELAB math stayed, the UI got dumber.
 
 External-tool integrations (see `MANUAL.md`'s "Optional external-tool
 features") are a different, already-settled category: gated behind a
-user-set config flag, never auto-probed, never bundled as a hard
-dependency. That pattern itself passes the one-sentence test ("install the
-tool, flip a switch in Menu") and is the template for any future one.
+config flag that's off by default and only ever probed on an explicit
+Menu click (e.g. Menu → Detect ImageMagick), never at startup or in the
+background, and never bundled as a hard dependency. That pattern itself
+passes the one-sentence test ("install the tool, click Detect in Menu")
+and is the template for any future one.
 
 ## Build and Run
 ```bash
 mvn package
-java -jar target/infimg-1.2-jar-with-dependencies.jar [-0..-9] [optional-image-file]
+java -jar target/infimg-1.3-jar-with-dependencies.jar [-0..-9] [optional-image-file]
 ```
 There are no automated tests — this is a team of two (Walter plus this
 assistant) with a tight manual-verify loop (see Feedback memory

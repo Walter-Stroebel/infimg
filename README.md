@@ -50,7 +50,7 @@ at an image and maybe straighten it."
 
 ```bash
 mvn package
-java -jar target/infimg-1.2-jar-with-dependencies.jar [-0..-9] [optional-image-file]
+java -jar target/infimg-1.3-jar-with-dependencies.jar [-0..-9] [optional-image-file]
 ```
 
 Sample start scripts (assume `java` is on `PATH`, resolve the jar relative
