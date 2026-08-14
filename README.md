@@ -25,10 +25,20 @@ at an image and maybe straighten it."
 ## Features
 
 - Fit-to-window on load, mouse-wheel zoom or (toolbar toggle) arbitrary-angle
-  rotate, click-drag pan.
+  rotate, click-drag pan. EXIF-orientation-aware, so a phone photo opens
+  upright rather than however the sensor recorded it.
 - **Save**/**Copy** write exactly the current on-screen pixels — zoom,
   rotation, pan, crop all baked in.
-- **Load**/**Paste** from a file or the system clipboard.
+- **Load**/**Paste** from a file or the system clipboard; slow sources (a
+  NAS share) show a "Loading" placeholder instead of freezing the window.
+- **Prev**/**Next** step through every file given on the command line, in
+  the order listed there.
+- **Menu → Rotate 90°/180°/270°** and **Flip Horizontal/Vertical** for
+  quick exact square-ups, alongside the free-angle wheel rotate.
+- Full command-line control for scripting: `--rotate DEG`, `--flip-hor`/
+  `--flip-ver`, `--lighter`/`--darker`/`--more-contrast`/`--less-contrast`,
+  and `--config PATH` to point at an alternate config file. See
+  [MANUAL.md](MANUAL.md).
 - 10 remembered window-position slots, selectable at launch (`-0`..`-9`) —
   lets any caller, in any language, embed infimg with "open at the user's
   preferred position/size" for free. See [MANUAL.md](MANUAL.md).
@@ -85,6 +95,31 @@ Full feature-by-feature reference, including the config file format:
 
 ### Changelog
 
+- **v1.4** — Added long-form CLI flags mirroring existing Menu actions —
+  `--rotate DEG`, `--flip-hor`/`--flip-ver`,
+  `--lighter`/`--darker`/`--more-contrast`/`--less-contrast`, `--slot` —
+  applied once to the first file shown, not as a batch mode. Added
+  `--config PATH` to point at an alternate config file instead of the
+  shared `~/.infimg.json`, mainly so more than one instance can run
+  side by side without fighting over the same window-position slots.
+  Multiple positional file arguments now populate a **Prev**/**Next**
+  list, navigating in the order given on the command line with no
+  directory scanning.
+- **v1.3** — Fixed EXIF orientation being double-applied (baked into
+  pixels and fed into the rotation state), which opened images rotated
+  180° off instead of upright; Fit-to-window ignoring rotation entirely
+  and clipping rotated images; an `AffineTransform` composition-order bug
+  that swapped Flip Horizontal/Vertical; file loading blocking the EDT
+  with no feedback on slow sources (NAS/CIFS); and a crash loading
+  non-JPEG files (e.g. PNG) caused by EXIF-orientation parsing assuming
+  JPEG's metadata format unconditionally. Added **Menu → Rotate
+  90°/180°/270°** (absolute, not additive) with a live rotation-degree
+  toolbar label; **Menu → Flip Horizontal/Vertical**; a "Loading"
+  placeholder for slow reads, backgrounded via `SwingWorker`; Metadata
+  now works for clipboard pastes too, with a shared last-modified/size
+  header; a one-click **Detect ImageMagick** probe; and Look & Feel now
+  defaults to FlatLaf Darcula on fresh Linux installs instead of System
+  Default (GTK's `JFileChooser` looked dated).
 - **v1.2.0** — Added a **Menu** button (keeps the main toolbar simple
   while leaving room to grow) with **Load Slot**/**Save as Slot**
   submenus over 10 remembered window-position slots, selectable at launch
