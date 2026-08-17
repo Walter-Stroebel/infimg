@@ -46,6 +46,10 @@ at an image and maybe straighten it."
   external-tool integrations like metadata viewing, look-and-feel) without
   cluttering the main toolbar. See [MANUAL.md](MANUAL.md) for the full
   feature reference.
+- **Menu → Pixel Microscope**: a separate window that zooms into
+  individual pixels around the cursor, with per-pixel sRGB/YUV/CIELab/HSB
+  values and a colour-frequency readout for the visible area. See
+  [MANUAL.md](MANUAL.md).
 - Pick a look-and-feel — system default or [FlatLaf](https://www.formdev.com/flatlaf/)
   Light/Dark/IntelliJ/Darcula — from Menu; applies instantly and persists.
 - **Menu → Lighter / Darker / More Contrast / Less Contrast**: one click,
@@ -60,7 +64,7 @@ at an image and maybe straighten it."
 
 ```bash
 mvn package
-java -jar target/infimg-1.4-jar-with-dependencies.jar [-0..-9] [optional-image-file]
+java -jar target/infimg-1.5-jar-with-dependencies.jar [-0..-9] [optional-image-file]
 ```
 
 Sample start scripts (assume `java` is on `PATH`, resolve the jar relative
@@ -95,6 +99,12 @@ Full feature-by-feature reference, including the config file format:
 
 ### Changelog
 
+- **v1.5** — Added **Menu → Pixel Microscope...**, a separate window for
+  zooming into individual pixels of the current image (drag-to-pan grid
+  view, per-pixel sRGB/YUV/CIELab/HSB, colour-frequency readout). Works
+  for both file-loaded and clipboard-pasted images. Window bounds persist
+  to the existing `~/.infimg.json`, no separate config file. See
+  [MANUAL.md](MANUAL.md).
 - **v1.4** — Added long-form CLI flags mirroring existing Menu actions —
   `--rotate DEG`, `--flip-hor`/`--flip-ver`,
   `--lighter`/`--darker`/`--more-contrast`/`--less-contrast`, `--slot` —

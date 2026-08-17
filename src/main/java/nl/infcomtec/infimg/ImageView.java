@@ -469,6 +469,16 @@ public final class ImageView extends JFrame {
         });
         menu.add(detectItem);
 
+        JMenuItem pixelMicroscopeItem = new JMenuItem("Pixel Microscope...");
+        pixelMicroscopeItem.setEnabled(hasImage);
+        pixelMicroscopeItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                openPixelMicroscope();
+            }
+        });
+        menu.add(pixelMicroscopeItem);
+
         menu.add(rotateMenuItem("Rotate 90°", hasImage, 90));
         menu.add(rotateMenuItem("Rotate 180°", hasImage, 180));
         menu.add(rotateMenuItem("Rotate 270°", hasImage, 270));
@@ -570,6 +580,70 @@ public final class ImageView extends JFrame {
      * (needs no external tool, and is the only option for a clipboard
      * paste — {@code identify} has no file to run against).
      */
+    /**
+     * Opens the pixel-level microscope (grid view, per-pixel sRGB/YUV/CIELab/
+     * HSB, colour-frequency readout) on the current canvas image. Uses the
+     * live {@code BufferedImage} directly rather than {@link #currentFile} —
+     * a clipboard paste has no backing file, and re-decoding from disk would
+     * also risk showing stale pixels if the view has been rotated/flipped/
+     * adjusted since load.
+     */
+    private void openPixelMicroscope() {
+        if (null == canvas.source) {
+            return;
+        }
+        String label = null != currentFile ? currentFile.getName() : "(clipboard paste)";
+        nl.infcomtec.infimg.pixelmicroscope.PixelMicroscopeFrame microscope
+                = new nl.infcomtec.infimg.pixelmicroscope.PixelMicroscopeFrame(new PixelMicroscopeBoundsPersistence());
+        try {
+            microscope.bigImage.loadImage(canvas.source, label);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "Failed to open Pixel Microscope: " + ex,
+                    "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        microscope.showFrame();
+    }
+
+    /**
+     * Backs Pixel Microscope's remembered window bounds with infimg's own
+     * {@code ~/.infimg.json} rather than letting it keep a second config
+     * file — one JSON file for the whole app, not one per window.
+     */
+    private final class PixelMicroscopeBoundsPersistence
+            implements nl.infcomtec.infimg.pixelmicroscope.PixelMicroscopeFrame.BoundsPersistence {
+
+        private int lastSideWidth = -1;
+
+        @Override
+        public Rectangle load() {
+            ViewConfig vc = loadConfig().pixelMicroscope;
+            if (null == vc) {
+                return null;
+            }
+            lastSideWidth = loadConfig().pixelMicroscopeSideWidth;
+            return new Rectangle(vc.x, vc.y, vc.width, vc.height);
+        }
+
+        @Override
+        public int loadSideWidth() {
+            return lastSideWidth;
+        }
+
+        @Override
+        public void save(Rectangle bounds, int sideWidth) {
+            AppConfig cfg = loadConfig();
+            ViewConfig vc = new ViewConfig();
+            vc.x = bounds.x;
+            vc.y = bounds.y;
+            vc.width = bounds.width;
+            vc.height = bounds.height;
+            cfg.pixelMicroscope = vc;
+            cfg.pixelMicroscopeSideWidth = sideWidth;
+            writeConfig(cfg);
+        }
+    }
+
     private void showMetadata() {
         AppConfig cfg = loadConfig();
         String body = (cfg.imageMagick && null != currentFile) ? runImageMagickIdentify() : basicMetadata();
@@ -890,6 +964,8 @@ public final class ImageView extends JFrame {
                 System.arraycopy(read.slots, 0, cfg.slots, 0, Math.min(read.slots.length, 10));
                 cfg.imageMagick = read.imageMagick;
                 cfg.laf = read.laf;
+                cfg.pixelMicroscope = read.pixelMicroscope;
+                cfg.pixelMicroscopeSideWidth = read.pixelMicroscopeSideWidth;
             } catch (IOException ex) {
                 Logger.getLogger(ImageView.class.getName()).log(Level.WARNING, "Could not read " + CONFIG_FILE, ex);
             }
@@ -909,6 +985,10 @@ public final class ImageView extends JFrame {
         public boolean imageMagick = false;
         /** One of {@link #LAF_NAMES}; applied at startup before any Swing component is created. Null/unset means {@link #defaultLaf}, not necessarily "System Default" — see there for the actual platform-dependent fallback. */
         public String laf = "System Default";
+        /** Last on-screen bounds of the Pixel Microscope window, or null if never opened — shares this file rather than keeping its own, see {@link #openPixelMicroscope}. */
+        public ViewConfig pixelMicroscope;
+        /** Last width of the Pixel Microscope's neighbourhood+info side column; meaningless while {@link #pixelMicroscope} is null. */
+        public int pixelMicroscopeSideWidth;
     }
 
     /** Plain POJO mirroring one slot of {@code ~/.infimg.json}'s last on-screen window bounds. */

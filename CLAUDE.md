@@ -96,6 +96,52 @@ foliage) and accepted as expected behavior at extreme settings, not a bug
 to fix (see "Feature scope" above — this tool doesn't add gamut-mapping
 complexity to protect against a user clicking a button ten times).
 
+## Pixel Microscope (added 2026-08-17)
+
+`Menu → Pixel Microscope...` opens a separate `AFrame`-based window (grid
+view of the pixels around the cursor, drag-to-pan like a stage, per-pixel
+sRGB/YUV/CIELab/HSB + colour-frequency readout) on the current
+`canvas.source` `BufferedImage` — works for both file-loaded and
+clipboard-pasted images, no temp file involved
+(`ImageView.openPixelMicroscope`).
+
+Started as a standalone prototype (`~/Prj/PixelInspector`, since deleted —
+nothing reusable was left behind; it was purpose-built for this
+integration) built by a sibling Claude Code session in this same
+conversation with Walter. Landed here 2026-08-17 by copying its classes
+into `nl.infcomtec.infimg.pixelmicroscope` (chassis: `AFrame`/`APanel`/
+`GBCompass`/`TabSignals`/`BoundsRecallCallback`/`SwingProps`, all copied
+verbatim from the `advswing` catalog module) and `nl.infcomtec.infimg`
+(`ColorBase`/`ColorImage`/`TriElm`, copied from Voynich's lineage,
+repackaged to reuse this project's *existing* `EnhancedColor`/`FloatColor`/
+`YUV` rather than bringing in a second copy). `AwtColor` was also pulled in
+fresh, at `nl.infcomtec.jacksonwrap.AwtColor` — `SwingProps`'s one external
+dependency, small and self-contained.
+
+**Window-bounds persistence deliberately does not use its own config
+file.** `PixelMicroscopeFrame` takes a `BoundsPersistence` callback
+interface in its constructor rather than owning a JSON file directly —
+when embedded here, `ImageView.PixelMicroscopeBoundsPersistence` backs it
+with two new `AppConfig` fields (`pixelMicroscope`/
+`pixelMicroscopeSideWidth`) in the *existing* `~/.infimg.json`, so there's
+still just the one config file for the whole app. `PixelMicroscopeFrame`
+only falls back to its own `~/.pixelmicroscope.json` when run standalone
+via its own `main` (not the path used from infimg's menu).
+
+This code was written under `nl.infcomtec.pixelinspector`'s (the
+prototype's) own default Java conventions before the rename/copy, then
+repackaged — it was re-checked against this file's "No `->` and no `::`"
+rule and comes up clean (verified via `grep -rn '\->|::'` across the new
+package, no hits), but it wasn't written *with* this CLAUDE.md loaded, so
+treat it with slightly more scrutiny than code written natively in this
+repo if something looks off.
+
+Follows the "Feature scope" one-sentence test: "click Menu → Pixel
+Microscope to zoom into individual pixels and their colour values" is a
+complete, jargon-free description — the radius slider and colour-frequency
+figures are details of *that one screen*, not new concepts layered onto
+infimg's own toolbar/mental model.
+
 ## Java Style — Non-Negotiable
 (Identical standing rule across this author's Java projects — see
 Voynich's `CLAUDE.md` for the fuller rationale/history behind each point;

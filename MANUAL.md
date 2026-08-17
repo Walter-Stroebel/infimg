@@ -277,6 +277,25 @@ especially) look noticeably dated compared to FlatLaf's pure-Swing
 rendering. This only affects a config with no stored choice yet; picking
 anything via Menu always sticks, on any platform.
 
+### Pixel Microscope
+
+**Menu → Pixel Microscope...** opens a separate window for zooming into
+individual pixels and their colour values on the image currently on
+screen — works whether that image came from **Load** or **Paste**.
+
+- Move the mouse over the main image window; the microscope window shows
+  a magnified grid of the pixels around the cursor, updating live.
+- Click-drag inside the grid to pan around, like moving a microscope
+  stage.
+- Selecting a pixel shows its exact colour in several representations:
+  sRGB, YUV, CIELab, and HSB.
+- A colour-frequency readout lists which colours appear most often in the
+  currently visible grid.
+
+The microscope window's size and position are remembered independently
+from the main window, in the same `~/.infimg.json` used for everything
+else — no separate config file.
+
 ## Config file format
 
 `~/.infimg.json`:
@@ -290,7 +309,9 @@ anything via Menu always sticks, on any platform.
     ...
   ],
   "imageMagick": false,
-  "laf": "System Default"
+  "laf": "System Default",
+  "pixelMicroscope": null,
+  "pixelMicroscopeSideWidth": 0
 }
 ```
 
@@ -299,6 +320,9 @@ anything via Menu always sticks, on any platform.
 - `imageMagick`: see above.
 - `laf`: one of `"System Default"`, `"FlatLaf Light"`, `"FlatLaf Dark"`,
   `"FlatLaf IntelliJ"`, `"FlatLaf Darcula"`.
+- `pixelMicroscope`/`pixelMicroscopeSideWidth`: last on-screen bounds and
+  side-column width of the Pixel Microscope window; `null` until it's
+  opened for the first time.
 
 infimg writes this file itself on every window move/resize, every
 Menu → Save as Slot, and every Menu → Look & Feel pick; hand-editing is
