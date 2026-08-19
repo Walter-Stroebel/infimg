@@ -71,8 +71,8 @@ import javax.swing.SwingWorker;
  */
 public final class ImageView extends JFrame {
 
-    /** Where window slots / imageMagick flag / look-and-feel are persisted — {@code ~/.infimg.json} unless {@code --config PATH} names another file, e.g. so two independently-launched instances don't share one slot set. Set once by {@link #main} before any Swing component (and so before any config read/write) exists; never reassigned after. */
-    private static File CONFIG_FILE = new File(System.getProperty("user.home"), ".infimg.json");
+    /** Where window slots / imageMagick flag / look-and-feel are persisted — under MITSA's shared app-data root ({@code nl.infcomtec.mitsa.MitsaPaths#appDataDir}) unless {@code --config PATH} names another file, e.g. so two independently-launched instances don't share one slot set. Set once by {@link #main} before any Swing component (and so before any config read/write) exists; never reassigned after. */
+    private static File CONFIG_FILE = new File(nl.infcomtec.mitsa.MitsaPaths.appDataDir("infimg"), "infimg.json");
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final ImageCanvas canvas = new ImageCanvas();
@@ -197,7 +197,7 @@ public final class ImageView extends JFrame {
     private static final String[] LAF_NAMES = {"System Default", "FlatLaf Light", "FlatLaf Dark", "FlatLaf IntelliJ", "FlatLaf Darcula"};
 
     /**
-     * The look-and-feel a brand-new {@code ~/.infimg.json} (or one
+     * The look-and-feel a brand-new {@code infimg.json} (MITSA app-data dir) (or one
      * missing the {@code laf} field) starts on — never overrides an
      * explicit prior choice, only fills in when there isn't one yet.
      * "System Default" is a genuinely good choice on macOS (Aqua) and
@@ -559,7 +559,7 @@ public final class ImageView extends JFrame {
     /**
      * Applies {@code name} to the running app immediately (via
      * {@link SwingUtilities#updateComponentTreeUI}, so no restart is
-     * needed to preview it) and persists it to {@code ~/.infimg.json} so
+     * needed to preview it) and persists it to {@code infimg.json} (MITSA app-data dir) so
      * future launches start with it already installed — {@link #main}
      * applies the stored LAF before any Swing component exists, which
      * this live in-session switch can't retroactively do for windows
@@ -621,7 +621,7 @@ public final class ImageView extends JFrame {
 
     /**
      * Backs Pixel Microscope's remembered window bounds with infimg's own
-     * {@code ~/.infimg.json} rather than letting it keep a second config
+     * {@code infimg.json} (MITSA app-data dir) rather than letting it keep a second config
      * file — one JSON file for the whole app, not one per window.
      */
     private final class PixelMicroscopeBoundsPersistence
@@ -753,7 +753,7 @@ public final class ImageView extends JFrame {
     /**
      * Runs {@code identify -version} to test whether ImageMagick is on
      * PATH, and persists the result to the {@code imageMagick} config flag
-     * — the one-click alternative to hand-editing {@code ~/.infimg.json}.
+     * — the one-click alternative to hand-editing {@code infimg.json} (MITSA app-data dir).
      * Requires a displayed image only so the menu item has something
      * sensible to be enabled/disabled on; the probe itself doesn't touch
      * {@link #currentFile}.
@@ -991,7 +991,7 @@ public final class ImageView extends JFrame {
         return cfg;
     }
 
-    /** Plain POJO mirroring {@code ~/.infimg.json}: the 10 window-position slots plus feature flags for optional external tools. */
+    /** Plain POJO mirroring {@code infimg.json} (MITSA app-data dir): the 10 window-position slots plus feature flags for optional external tools. */
     public static final class AppConfig {
 
         public ViewConfig[] slots = new ViewConfig[10];
@@ -1005,7 +1005,7 @@ public final class ImageView extends JFrame {
         public int pixelMicroscopeSideWidth;
     }
 
-    /** Plain POJO mirroring one slot of {@code ~/.infimg.json}'s last on-screen window bounds. */
+    /** Plain POJO mirroring one slot of {@code infimg.json} (MITSA app-data dir)'s last on-screen window bounds. */
     public static final class ViewConfig {
 
         public int x;

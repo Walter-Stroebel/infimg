@@ -110,14 +110,14 @@ Full feature-by-feature reference, including the config file format:
   zooming into individual pixels of the current image (drag-to-pan grid
   view, per-pixel sRGB/YUV/CIELab/HSB, colour-frequency readout). Works
   for both file-loaded and clipboard-pasted images. Window bounds persist
-  to the existing `~/.infimg.json`, no separate config file. See
+  to the existing `infimg.json` (MITSA app-data dir), no separate config file. See
   [MANUAL.md](MANUAL.md).
 - **v1.4** — Added long-form CLI flags mirroring existing Menu actions —
   `--rotate DEG`, `--flip-hor`/`--flip-ver`,
   `--lighter`/`--darker`/`--more-contrast`/`--less-contrast`, `--slot` —
   applied once to the first file shown, not as a batch mode. Added
   `--config PATH` to point at an alternate config file instead of the
-  shared `~/.infimg.json`, mainly so more than one instance can run
+  shared `infimg.json` (MITSA app-data dir), mainly so more than one instance can run
   side by side without fighting over the same window-position slots.
   Multiple positional file arguments now populate a **Prev**/**Next**
   list, navigating in the order given on the command line with no
@@ -148,7 +148,7 @@ Full feature-by-feature reference, including the config file format:
   sets themselves after installing it — see MANUAL.md. Added a
   **Look & Feel** submenu (System Default plus FlatLaf's four bundled
   themes — Light/Dark/IntelliJ/Darcula) via a new `flatlaf` dependency;
-  switches instantly and the choice persists to `~/.infimg.json`. Added
+  switches instantly and the choice persists to `infimg.json` (MITSA app-data dir). Added
   **Lighter**/**Darker**/**More Contrast**/**Less Contrast** — one-click,
   no-dialog CIELAB L* nudges (a fixed offset per click for
   brightness, a sigmoid S-curve step for contrast), each recomputed

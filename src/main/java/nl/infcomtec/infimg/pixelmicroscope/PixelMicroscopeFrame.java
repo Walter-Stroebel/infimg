@@ -160,7 +160,7 @@ public class PixelMicroscopeFrame extends AFrame {
      */
     private static final class StandaloneBoundsPersistence implements BoundsPersistence {
 
-        private static final File CONFIG_FILE = new File(System.getProperty("user.home"), ".pixelmicroscope.json");
+        private static final File CONFIG_FILE = new File(nl.infcomtec.mitsa.MitsaPaths.appDataDir("infimg"), "pixelmicroscope.json");
         private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER
                 = new com.fasterxml.jackson.databind.ObjectMapper();
 

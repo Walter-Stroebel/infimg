@@ -54,7 +54,7 @@ java -jar infimg.jar [-0..-9 | --slot N] [--config PATH]
 - **`-0` through `-9`** (or **`--slot N`**, the same thing spelled out):
   which of the 10 window-position slots to open at — see "Window-position
   slots" below. No flag defaults to slot 0.
-- **`--config PATH`**: use `PATH` instead of `~/.infimg.json` for this run
+- **`--config PATH`**: use `PATH` instead of `infimg.json` (MITSA app-data dir) for this run
   — window slots, the ImageMagick flag, and the Look & Feel choice are all
   read from and written to `PATH` instead. Mainly for running more than
   one infimg instance side by side without them fighting over the same
@@ -99,7 +99,7 @@ behind one button.
 ### Window-position slots
 
 infimg remembers **10** window positions/sizes, not just one, in
-`~/.infimg.json`. Each is an independent slot, numbered 0–9.
+`infimg.json` (MITSA app-data dir). Each is an independent slot, numbered 0–9.
 
 - **Launch**: `-0` through `-9` picks which slot to open at. No flag
   defaults to `-0`. E.g.:
@@ -139,7 +139,7 @@ separately.
 
 **infimg never probes for these on its own, at startup or in the
 background.** Each optional feature is gated behind a boolean flag in
-`~/.infimg.json` that starts `false`. You turn the flag on either by
+`infimg.json` (MITSA app-data dir) that starts `false`. You turn the flag on either by
 clicking a menu item that checks for the tool right then (see below) or
 by editing the JSON file yourself — no auto-detection at launch, no
 startup cost, no surprise external-process launches for tools you never
@@ -190,7 +190,7 @@ To enable the ImageMagick version:
 
 If `identify` isn't on `PATH` yet, the dialog just says so; install it and
 click **Detect ImageMagick** again. You can also skip the click and edit
-`~/.infimg.json` directly, setting `"imageMagick": true` by hand — the
+`infimg.json` (MITSA app-data dir) directly, setting `"imageMagick": true` by hand — the
 file is small and obvious, and the flag is re-read from disk every time
 Menu is built.
 
@@ -263,13 +263,13 @@ dependency (a small, pure-Java jar with no native/system requirements),
 so all five options are always available.
 
 Picking one applies it to the running window immediately (no restart
-needed to preview it) and persists the choice to `~/.infimg.json`, so
+needed to preview it) and persists the choice to `infimg.json` (MITSA app-data dir), so
 future launches start with it already installed — this is also *why*
 it's a config field rather than session-only: a look-and-feel has to be
 set before any Swing component is created, which only the next process
 launch can do properly.
 
-**Default for a fresh install** (no `laf` in `~/.infimg.json` yet): System
+**Default for a fresh install** (no `laf` in `infimg.json` (MITSA app-data dir) yet): System
 Default on macOS/Windows, where the native look (Aqua/Windows) is
 genuinely fine — but FlatLaf Darcula on Linux, since System Default there
 usually resolves to GTK's Swing bridge, whose widgets (the file chooser
@@ -293,12 +293,12 @@ screen — works whether that image came from **Load** or **Paste**.
   currently visible grid.
 
 The microscope window's size and position are remembered independently
-from the main window, in the same `~/.infimg.json` used for everything
+from the main window, in the same `infimg.json` (MITSA app-data dir) used for everything
 else — no separate config file.
 
 ## Config file format
 
-`~/.infimg.json`:
+`infimg.json` (MITSA app-data dir):
 
 ```json
 {

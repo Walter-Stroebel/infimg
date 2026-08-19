@@ -69,7 +69,7 @@ round-trips behind Menu → Lighter/Darker/More Contrast/Less Contrast.
 
 | Class | Role |
 |-------|------|
-| `ImageView` | Entry point and the entire UI: toolbar (Load/Save/Paste/Copy/Rotate toggle/Fit/Menu/Exit), the `ImageCanvas` inner class (zoom/rotate/pan, mouse handling, `paintComponent`'s single `AffineTransform`), `AppConfig`/`ViewConfig` (persisted to `~/.infimg.json`), and every `Menu` feature (window slots, ImageMagick metadata, Look & Feel, brightness/contrast). See `MANUAL.md` for the user-facing behavior of each. |
+| `ImageView` | Entry point and the entire UI: toolbar (Load/Save/Paste/Copy/Rotate toggle/Fit/Menu/Exit), the `ImageCanvas` inner class (zoom/rotate/pan, mouse handling, `paintComponent`'s single `AffineTransform`), `AppConfig`/`ViewConfig` (persisted to `infimg.json` (MITSA app-data dir)), and every `Menu` feature (window slots, ImageMagick metadata, Look & Feel, brightness/contrast). See `MANUAL.md` for the user-facing behavior of each. |
 | `EnhancedColor` | `java.awt.Color` subclass carrying the CIELAB/XYZ math (`getCIELAB`/`fromCIELAB`/`getXYZ`, `deltaE`, gamut checks). Pulled in from Voynich rather than reimplemented — see its class doc for the full API; infimg only exercises the CIELAB round-trip, allocation-free int-keyed variants (`getCIELAB(int, double[])`) for per-pixel-parallel work. |
 | `FloatColor` / `YUV` | Supporting colour types `EnhancedColor` depends on (float RGBA, YUV distance) — not used directly by infimg's own features, kept because `EnhancedColor` references them. |
 
@@ -130,9 +130,9 @@ file.** `PixelMicroscopeFrame` takes a `BoundsPersistence` callback
 interface in its constructor rather than owning a JSON file directly —
 when embedded here, `ImageView.PixelMicroscopeBoundsPersistence` backs it
 with two new `AppConfig` fields (`pixelMicroscope`/
-`pixelMicroscopeSideWidth`) in the *existing* `~/.infimg.json`, so there's
+`pixelMicroscopeSideWidth`) in the *existing* `infimg.json` (MITSA app-data dir), so there's
 still just the one config file for the whole app. `PixelMicroscopeFrame`
-only falls back to its own `~/.pixelmicroscope.json` when run standalone
+only falls back to its own `pixelmicroscope.json` (MITSA app-data dir) when run standalone
 via its own `main` (not the path used from infimg's menu).
 
 This code was written under `nl.infcomtec.pixelinspector`'s (the
