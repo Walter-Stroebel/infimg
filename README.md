@@ -161,4 +161,3 @@ Full feature-by-feature reference, including the config file format:
   `imageFlavor` for images carrying an (always-opaque-anyway) alpha
   channel.
 - **v1.0.0** — Initial release.
-</content>

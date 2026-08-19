@@ -247,4 +247,3 @@ behavior (e.g. why `renderCurrentView` uses `TYPE_INT_RGB` not `_ARGB` —
 see that method's doc for the actual Linux/X11 clipboard bug it works
 around). Don't document getters/setters or anything already stated by a
 name plus its immediate context.
-</content>

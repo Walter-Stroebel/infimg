@@ -328,4 +328,3 @@ infimg writes this file itself on every window move/resize, every
 Menu → Save as Slot, and every Menu → Look & Feel pick; hand-editing is
 only needed to flip feature flags like `imageMagick`, or to seed/correct
 a slot's geometry directly.
-</content>
