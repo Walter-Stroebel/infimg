@@ -14,7 +14,7 @@ one on `PATH` either way).
 ## 2. Register and run infimg
 
 ```bash
-mitsa add infimg Walter-Stroebel infimg
+mitsa add infimg Walter-Stroebel infimg 'infimg-.*-jar-with-dependencies\.jar'
 ```
 
 This registers infimg, fetches the latest release jar, and writes an
