@@ -1,5 +1,7 @@
 # infimg
 
+![What infimg does](docs/infimg-overview.png)
+
 A small, cross-platform (Linux/macOS/Windows) Java/Swing image viewer that
 does the one thing no OS default viewer seems to get right: fit-to-window
 plus genuinely arbitrary-angle rotation, in one native, embeddable,
