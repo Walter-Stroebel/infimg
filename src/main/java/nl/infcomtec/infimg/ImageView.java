@@ -285,6 +285,18 @@ public final class ImageView extends JFrame {
             }
         });
         toolBar.add(loadButton);
+        toolBar.add(javax.swing.Box.createHorizontalStrut(4));
+
+        JButton recentButton = new JButton("▾");
+        recentButton.setToolTipText("Recently opened files");
+        recentButton.setMargin(new java.awt.Insets(2, 8, 2, 8));
+        recentButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showRecentFilesMenu(recentButton);
+            }
+        });
+        toolBar.add(recentButton);
 
         JButton saveButton = new JButton("Save");
         saveButton.setToolTipText("Save exactly the current view (zoom, rotation, pan) to a new image file");
@@ -493,6 +505,16 @@ public final class ImageView extends JFrame {
         });
         menu.add(pixelMicroscopeItem);
 
+        JMenuItem quadOverlayItem = new JMenuItem("Quad ΔE Overlay...");
+        quadOverlayItem.setEnabled(hasImage);
+        quadOverlayItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                openQuadOverlay();
+            }
+        });
+        menu.add(quadOverlayItem);
+
         menu.add(rotateMenuItem("Rotate 90°", hasImage, 90));
         menu.add(rotateMenuItem("Rotate 180°", hasImage, 180));
         menu.add(rotateMenuItem("Rotate 270°", hasImage, 270));
@@ -617,6 +639,54 @@ public final class ImageView extends JFrame {
             return;
         }
         microscope.showFrame();
+    }
+
+    /**
+     * Opens the CIE76 ΔE quadtree boundary overlay on the current canvas
+     * image — a live vector overlay window, never mutating {@code
+     * canvas.source}, same "inspect, don't render" spirit as Pixel
+     * Microscope. Uses the live {@code BufferedImage} directly for the
+     * same reasons {@link #openPixelMicroscope} does.
+     */
+    private void openQuadOverlay() {
+        if (null == canvas.source) {
+            return;
+        }
+        String label = null != currentFile ? currentFile.getName() : "(clipboard paste)";
+        nl.infcomtec.infimg.quadmesh.QuadOverlayFrame frame
+                = new nl.infcomtec.infimg.quadmesh.QuadOverlayFrame(
+                        canvas.source, label, new QuadOverlayBoundsPersistence());
+        frame.showFrame();
+    }
+
+    /**
+     * Backs Quad ΔE Overlay's remembered window bounds with infimg's own
+     * {@code infimg.json} (MITSA app-data dir) rather than a second config
+     * file — same pattern as {@link PixelMicroscopeBoundsPersistence}.
+     */
+    private final class QuadOverlayBoundsPersistence
+            implements nl.infcomtec.infimg.quadmesh.QuadOverlayFrame.BoundsPersistence {
+
+        @Override
+        public Rectangle load() {
+            ViewConfig vc = loadConfig().quadOverlay;
+            if (null == vc) {
+                return null;
+            }
+            return new Rectangle(vc.x, vc.y, vc.width, vc.height);
+        }
+
+        @Override
+        public void save(Rectangle bounds) {
+            AppConfig cfg = loadConfig();
+            ViewConfig vc = new ViewConfig();
+            vc.x = bounds.x;
+            vc.y = bounds.y;
+            vc.width = bounds.width;
+            vc.height = bounds.height;
+            cfg.quadOverlay = vc;
+            writeConfig(cfg);
+        }
     }
 
     /**
@@ -958,6 +1028,44 @@ public final class ImageView extends JFrame {
         writeConfig(cfg);
     }
 
+    /** Cap on {@link AppConfig#recentFiles} — enough to be useful without the dropdown becoming a second file browser. */
+    private static final int RECENT_FILES_MAX = 10;
+
+    /** Moves {@code file} to the front of {@link AppConfig#recentFiles} (removing any earlier duplicate) after a successful load, dropping the oldest entry past {@link #RECENT_FILES_MAX}. */
+    private void recordRecentFile(File file) {
+        AppConfig cfg = loadConfig();
+        String path = file.getAbsolutePath();
+        cfg.recentFiles.remove(path);
+        cfg.recentFiles.add(0, path);
+        while (cfg.recentFiles.size() > RECENT_FILES_MAX) {
+            cfg.recentFiles.remove(cfg.recentFiles.size() - 1);
+        }
+        writeConfig(cfg);
+    }
+
+    /** Pops up {@link AppConfig#recentFiles} as a menu below {@code invoker}, most-recent first. */
+    private void showRecentFilesMenu(java.awt.Component invoker) {
+        java.util.List<String> recent = loadConfig().recentFiles;
+        javax.swing.JPopupMenu popup = new javax.swing.JPopupMenu();
+        if (recent.isEmpty()) {
+            JMenuItem empty = new JMenuItem("(no recent files)");
+            empty.setEnabled(false);
+            popup.add(empty);
+        } else {
+            for (final String path : recent) {
+                JMenuItem item = new JMenuItem(path);
+                item.addActionListener(new ActionListener() {
+                    @Override
+                    public void actionPerformed(ActionEvent e) {
+                        load(new File(path));
+                    }
+                });
+                popup.add(item);
+            }
+        }
+        popup.show(invoker, 0, invoker.getHeight());
+    }
+
     private static void writeConfig(AppConfig cfg) {
         try {
             MAPPER.writerWithDefaultPrettyPrinter().writeValue(CONFIG_FILE, cfg);
@@ -980,6 +1088,10 @@ public final class ImageView extends JFrame {
                 cfg.laf = read.laf;
                 cfg.pixelMicroscope = read.pixelMicroscope;
                 cfg.pixelMicroscopeSideWidth = read.pixelMicroscopeSideWidth;
+                cfg.quadOverlay = read.quadOverlay;
+                if (null != read.recentFiles) {
+                    cfg.recentFiles = read.recentFiles;
+                }
             } catch (IOException ex) {
                 Logger.getLogger(ImageView.class.getName()).log(Level.WARNING, "Could not read " + CONFIG_FILE, ex);
             }
@@ -1003,6 +1115,10 @@ public final class ImageView extends JFrame {
         public ViewConfig pixelMicroscope;
         /** Last width of the Pixel Microscope's neighbourhood+info side column; meaningless while {@link #pixelMicroscope} is null. */
         public int pixelMicroscopeSideWidth;
+        /** Last on-screen bounds of the Quad ΔE Overlay window, or null if never opened. */
+        public ViewConfig quadOverlay;
+        /** Most-recently-loaded files, most recent first, capped at {@link #RECENT_FILES_MAX} — the dropdown next to Load. */
+        public java.util.List<String> recentFiles = new java.util.ArrayList<String>();
     }
 
     /** Plain POJO mirroring one slot of {@code infimg.json} (MITSA app-data dir)'s last on-screen window bounds. */
@@ -1102,6 +1218,7 @@ public final class ImageView extends JFrame {
                     canvas.setImage(applyExifOrientation(img, orientation), exifRotationDegrees(orientation));
                     currentFile = file;
                     setBaseTitle(file.getName());
+                    recordRecentFile(file);
                     for (CliOp op : ops) {
                         op.apply(ImageView.this);
                     }

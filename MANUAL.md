@@ -8,6 +8,7 @@ Feature-by-feature reference. For the pitch and build instructions, see
 | Button | Does |
 |---|---|
 | Load | Open an image file via the OS file chooser. If the file has an EXIF orientation tag (most phone camera JPEGs do), the image is automatically rotated to display upright — matching what Nemo, Photos, and browsers already show you, rather than the raw sensor pixels. The read runs in the background, so a slow source (a NAS share has been the noticeable real case) shows a large "Loading" placeholder instead of freezing the window. |
+| ▾ | Pops up the last 10 files opened (most recent first); click one to load it directly, skipping the file chooser. |
 | Save | Write exactly the current on-screen pixels (zoom, rotation, pan, crop all baked in) to a new file. |
 | Paste | Load whatever image is on the system clipboard. |
 | Copy | Copy exactly the current on-screen pixels to the system clipboard. |
@@ -296,6 +297,30 @@ The microscope window's size and position are remembered independently
 from the main window, in the same `infimg.json` (MITSA app-data dir) used for everything
 else — no separate config file.
 
+### Quad ΔE Overlay
+
+**Menu → Quad ΔE Overlay...** opens a separate window showing the image
+currently on screen with boundary lines overlaid, marking where colour
+stops being visually uniform. It works by recursively splitting the image
+into quarters wherever a box isn't uniform enough, stopping once it is —
+so dense grids of small boxes point at busy regions (ink, faint
+bleed-through, texture), and large empty boxes point at flat, uniform
+areas. The lines are drawn live on top of the image, never baked into the
+pixels — closing the window or picking a different detail level doesn't
+touch the original.
+
+- **ΔE Detail** menu: **Coarse**/**Fine**/**Finest** presets (looser to
+  tighter colour-matching tolerance — Finest can pick up scan noise on a
+  photographed page as well as real content, which is expected, not a
+  bug), or **Custom...** to type a specific tolerance number directly.
+- **Copy**/**Save** on this window's own menu bar capture exactly what
+  it's currently showing (image + boundary lines) — same behaviour as the
+  main toolbar's Copy/Save, just scoped to this window.
+
+The overlay window's size and position are remembered independently from
+the main window, in the same `infimg.json` (MITSA app-data dir) as
+everything else.
+
 ## Config file format
 
 `infimg.json` (MITSA app-data dir):
@@ -311,7 +336,9 @@ else — no separate config file.
   "imageMagick": false,
   "laf": "System Default",
   "pixelMicroscope": null,
-  "pixelMicroscopeSideWidth": 0
+  "pixelMicroscopeSideWidth": 0,
+  "quadOverlay": null,
+  "recentFiles": []
 }
 ```
 
@@ -323,8 +350,100 @@ else — no separate config file.
 - `pixelMicroscope`/`pixelMicroscopeSideWidth`: last on-screen bounds and
   side-column width of the Pixel Microscope window; `null` until it's
   opened for the first time.
+- `quadOverlay`: last on-screen bounds of the Quad ΔE Overlay window;
+  `null` until it's opened for the first time.
+- `recentFiles`: absolute paths of the last 10 files opened, most recent
+  first — backs the **▾** dropdown next to Load.
 
 infimg writes this file itself on every window move/resize, every
-Menu → Save as Slot, and every Menu → Look & Feel pick; hand-editing is
-only needed to flip feature flags like `imageMagick`, or to seed/correct
-a slot's geometry directly.
+Menu → Save as Slot, every Menu → Look & Feel pick, and every successful
+Load; hand-editing is only needed to flip feature flags like
+`imageMagick`, or to seed/correct a slot's geometry directly.
+
+## CI / Releases
+
+Every push builds the jar (`.github/workflows/build.yml`) and uploads it
+as a build artifact. Pushing a tag matching `v*.*.*` (e.g. `v1.0.0`)
+additionally builds and publishes a GitHub Release with the fat jar
+attached (`.github/workflows/release.yml`).
+
+## Changelog
+
+- **v1.8** — Added **Menu → Quad ΔE Overlay...**, a separate window
+  showing a live CIELab ΔE quadtree overlay on the current image —
+  recursively splits the image into boxes wherever colour isn't visually
+  uniform, surfacing subtle content (faint bleed-through, texture,
+  boundaries) that's easy to miss by eye. Coarse/Fine/Finest presets plus
+  a Custom... entry for a specific ΔE value; Copy/Save on the overlay
+  itself. Also added a **▾** recent-files dropdown next to Load (last 10
+  files, jumps straight back in).
+- **v1.6** — Installable via [MITSA](https://github.com/Walter-Stroebel/mitsa)
+  (see [INSTALL.md](INSTALL.md)); per-OS `scripts/infimg.*` and the
+  hand-written `~/bin/infimg` are retired in favor of MITSA's managed
+  shim. Also fixed a CLI bug where `--help` (or any unrecognized `--`
+  flag) fell through to file-open logic and popped a GUI error dialog
+  instead of printing usage — `--help`/`-h` now prints usage and exits
+  cleanly, and unknown `--` flags print an error instead of trying to
+  open as a file.
+- **v1.5** — Added **Menu → Pixel Microscope...**, a separate window for
+  zooming into individual pixels of the current image (drag-to-pan grid
+  view, per-pixel sRGB/YUV/CIELab/HSB, colour-frequency readout). Works
+  for both file-loaded and clipboard-pasted images. Window bounds persist
+  to the existing `infimg.json` (MITSA app-data dir), no separate config
+  file.
+- **v1.4** — Added long-form CLI flags mirroring existing Menu actions —
+  `--rotate DEG`, `--flip-hor`/`--flip-ver`,
+  `--lighter`/`--darker`/`--more-contrast`/`--less-contrast`, `--slot` —
+  applied once to the first file shown, not as a batch mode. Added
+  `--config PATH` to point at an alternate config file instead of the
+  shared `infimg.json` (MITSA app-data dir), mainly so more than one
+  instance can run side by side without fighting over the same
+  window-position slots. Multiple positional file arguments now populate a
+  **Prev**/**Next** list, navigating in the order given on the command
+  line with no directory scanning.
+- **v1.3** — Fixed EXIF orientation being double-applied (baked into
+  pixels and fed into the rotation state), which opened images rotated
+  180° off instead of upright; Fit-to-window ignoring rotation entirely
+  and clipping rotated images; an `AffineTransform` composition-order bug
+  that swapped Flip Horizontal/Vertical; file loading blocking the EDT
+  with no feedback on slow sources (NAS/CIFS); and a crash loading
+  non-JPEG files (e.g. PNG) caused by EXIF-orientation parsing assuming
+  JPEG's metadata format unconditionally. Added **Menu → Rotate
+  90°/180°/270°** (absolute, not additive) with a live rotation-degree
+  toolbar label; **Menu → Flip Horizontal/Vertical**; a "Loading"
+  placeholder for slow reads, backgrounded via `SwingWorker`; Metadata
+  now works for clipboard pastes too, with a shared last-modified/size
+  header; a one-click **Detect ImageMagick** probe; and Look & Feel now
+  defaults to FlatLaf Darcula on fresh Linux installs instead of System
+  Default (GTK's `JFileChooser` looked dated).
+- **v1.2.0** — Added a **Menu** button (keeps the main toolbar simple
+  while leaving room to grow) with **Load Slot**/**Save as Slot**
+  submenus over 10 remembered window-position slots, selectable at launch
+  with `-0` through `-9`. Promoting the current geometry into a new slot
+  while running as the default slot 0 reverts slot 0 to what it held
+  before this session started, undoing any autosave drift picked up along
+  the way. Added a **Metadata** menu item that shells out to ImageMagick's
+  `identify -verbose`, gated behind an `imageMagick` config flag the user
+  sets themselves after installing it. Added a **Look & Feel** submenu
+  (System Default plus FlatLaf's four bundled themes —
+  Light/Dark/IntelliJ/Darcula) via a new `flatlaf` dependency; switches
+  instantly and the choice persists to `infimg.json` (MITSA app-data
+  dir). Added **Lighter**/**Darker**/**More Contrast**/**Less Contrast**
+  — one-click, no-dialog CIELAB L* nudges (a fixed offset per click for
+  brightness, a sigmoid S-curve step for contrast), each recomputed
+  across all CPU cores. (An earlier slider-dialog version of this was
+  replaced — a numeric L* offset dialog was more control than most users
+  actually want; click-and-see repeatable nudges are simpler and just as
+  effective.) The title bar now gets a trailing `*` once a pixel
+  adjustment has been made (informative only, not enforced) — zoom,
+  rotate, and pan don't count, only Lighter/Darker/More Contrast/Less
+  Contrast do.
+- **v1.1.0** — Clipboard **Paste**/**Copy** buttons alongside Load/Save.
+  Fixed the rotate/zoom pivot drifting off to wherever the image had been
+  panned to (it's now pinned to the true viewport center regardless of
+  pan). Copy renders as opaque RGB, not ARGB, avoiding a JDK Linux/X11 bug
+  where the clipboard manager's PNG round-trip (which keeps clipboard data
+  available after this process exits) can't be read back via
+  `imageFlavor` for images carrying an (always-opaque-anyway) alpha
+  channel.
+- **v1.0.0** — Initial release.
