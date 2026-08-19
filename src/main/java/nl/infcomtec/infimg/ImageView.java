@@ -92,6 +92,13 @@ public final class ImageView extends JFrame {
         void apply(ImageView view);
     }
 
+    /** Printed for {@code --help}/{@code -h} and on an unrecognized {@code --}-prefixed option. */
+    private static void printUsage() {
+        System.out.println("Usage: infimg [-0..-9] [--slot N] [--config FILE] [--rotate DEGREES]");
+        System.out.println("              [--flip-hor] [--flip-ver] [--lighter] [--darker]");
+        System.out.println("              [--more-contrast] [--less-contrast] [FILE...]");
+    }
+
     public static void main(String[] args) {
         int slot = 0;
         final java.util.List<File> files = new java.util.ArrayList<>();
@@ -100,6 +107,9 @@ public final class ImageView extends JFrame {
             String arg = args[i];
             if (arg.length() == 2 && arg.charAt(0) == '-' && Character.isDigit(arg.charAt(1))) {
                 slot = arg.charAt(1) - '0';
+            } else if ("--help".equals(arg) || "-h".equals(arg)) {
+                printUsage();
+                System.exit(0);
             } else if ("--slot".equals(arg)) {
                 slot = Integer.parseInt(args[++i]);
             } else if ("--config".equals(arg)) {
@@ -158,6 +168,10 @@ public final class ImageView extends JFrame {
                         view.applyAdjustmentAsync(new ContrastStep(), -CONTRAST_STEP);
                     }
                 });
+            } else if (arg.startsWith("--")) {
+                System.err.println("Unrecognized option: " + arg);
+                printUsage();
+                System.exit(1);
             } else {
                 files.add(new File(arg));
             }

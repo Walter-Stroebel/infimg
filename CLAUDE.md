@@ -43,10 +43,17 @@ passes the one-sentence test ("install the tool, click Detect in Menu")
 and is the template for any future one.
 
 ## Build and Run
+For development, build and run directly from Maven:
 ```bash
 mvn package
-java -jar target/infimg-1.4-jar-with-dependencies.jar [-0..-9] [optional-image-file]
+java -jar target/infimg-1.6-jar-with-dependencies.jar [-0..-9] [optional-image-file]
 ```
+End users install and run infimg through [MITSA](https://github.com/Walter-Stroebel/mitsa)
+instead — see `INSTALL.md`. MITSA resolves the latest GitHub Release jar
+and owns the `~/bin/infimg` launcher; infimg's release workflow only needs
+to keep publishing `infimg-*-jar-with-dependencies.jar` on tagged releases
+for MITSA to pick up, nothing else changes here.
+
 There are no automated tests — this is a team of two (Walter plus this
 assistant) with a tight manual-verify loop (see Feedback memory
 `feedback_no_test_framework_by_design`); every feature in this file was

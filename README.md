@@ -60,19 +60,18 @@ at an image and maybe straighten it."
   `java.awt.Color.brighter()`) actually does. Full-image recompute,
   parallelized across every core, on every click.
 
-## Build & run
+## Install & run
+
+See [INSTALL.md](INSTALL.md) — install [MITSA](https://github.com/Walter-Stroebel/mitsa)
+once, then `mitsa add infimg Walter-Stroebel infimg` gets you a working
+`infimg` command on `PATH` that stays updated.
+
+## Build (development)
 
 ```bash
 mvn package
-java -jar target/infimg-1.5-jar-with-dependencies.jar [-0..-9] [optional-image-file]
+java -jar target/infimg-1.6-jar-with-dependencies.jar [-0..-9] [optional-image-file]
 ```
-
-Sample start scripts (assume `java` is on `PATH`, resolve the jar relative
-to their own location, so they work from anywhere):
-
-- `scripts/infimg.sh` — Linux
-- `scripts/infimg.command` — macOS (double-click in Finder)
-- `scripts/infimg.bat` — Windows
 
 ## CI / Releases
 
@@ -99,6 +98,14 @@ Full feature-by-feature reference, including the config file format:
 
 ### Changelog
 
+- **v1.6** — Installable via [MITSA](https://github.com/Walter-Stroebel/mitsa)
+  (see [INSTALL.md](INSTALL.md)); per-OS `scripts/infimg.*` and the
+  hand-written `~/bin/infimg` are retired in favor of MITSA's managed
+  shim. Also fixed a CLI bug where `--help` (or any unrecognized `--`
+  flag) fell through to file-open logic and popped a GUI error dialog
+  instead of printing usage — `--help`/`-h` now prints usage and exits
+  cleanly, and unknown `--` flags print an error instead of trying to
+  open as a file.
 - **v1.5** — Added **Menu → Pixel Microscope...**, a separate window for
   zooming into individual pixels of the current image (drag-to-pan grid
   view, per-pixel sRGB/YUV/CIELab/HSB, colour-frequency readout). Works
