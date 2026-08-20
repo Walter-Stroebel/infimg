@@ -48,7 +48,7 @@ once, then `mitsa add infimg Walter-Stroebel infimg` gets you a working
 
 ```bash
 mvn package
-java -jar target/infimg-1.8.1-jar-with-dependencies.jar [-0..-9] [optional-image-file]
+java -jar target/infimg-1.9-jar-with-dependencies.jar [-0..-9] [optional-image-file]
 ```
 
 ## Dependencies

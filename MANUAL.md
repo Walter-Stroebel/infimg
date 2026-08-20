@@ -369,7 +369,7 @@ attached (`.github/workflows/release.yml`).
 
 ## Changelog
 
-- **v1.8.1** — Renamed `--config` to `-c`/`--config-file` to match the
+- **v1.9** — Renamed `--config` to `-c`/`--config-file` to match the
   `-c`/`--config-file` convention now standard across this author's
   other CLI tools.
 - **v1.8** — Added **Menu → Quad ΔE Overlay...**, a separate window
