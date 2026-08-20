@@ -71,7 +71,7 @@ import javax.swing.SwingWorker;
  */
 public final class ImageView extends JFrame {
 
-    /** Where window slots / imageMagick flag / look-and-feel are persisted — under MITSA's shared app-data root ({@code nl.infcomtec.mitsa.MitsaPaths#appDataDir}) unless {@code --config PATH} names another file, e.g. so two independently-launched instances don't share one slot set. Set once by {@link #main} before any Swing component (and so before any config read/write) exists; never reassigned after. */
+    /** Where window slots / imageMagick flag / look-and-feel are persisted — under MITSA's shared app-data root ({@code nl.infcomtec.mitsa.MitsaPaths#appDataDir}) unless {@code -c PATH}/{@code --config-file PATH} names another file, e.g. so two independently-launched instances don't share one slot set. Set once by {@link #main} before any Swing component (and so before any config read/write) exists; never reassigned after. */
     private static File CONFIG_FILE = new File(nl.infcomtec.mitsa.MitsaPaths.appDataDir("infimg"), "infimg.json");
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -94,7 +94,7 @@ public final class ImageView extends JFrame {
 
     /** Printed for {@code --help}/{@code -h} and on an unrecognized {@code --}-prefixed option. */
     private static void printUsage() {
-        System.out.println("Usage: infimg [-0..-9] [--slot N] [--config FILE] [--rotate DEGREES]");
+        System.out.println("Usage: infimg [-0..-9] [--slot N] [-c|--config-file FILE] [--rotate DEGREES]");
         System.out.println("              [--flip-hor] [--flip-ver] [--lighter] [--darker]");
         System.out.println("              [--more-contrast] [--less-contrast] [FILE...]");
     }
@@ -112,7 +112,7 @@ public final class ImageView extends JFrame {
                 System.exit(0);
             } else if ("--slot".equals(arg)) {
                 slot = Integer.parseInt(args[++i]);
-            } else if ("--config".equals(arg)) {
+            } else if ("--config-file".equals(arg) || "-c".equals(arg)) {
                 CONFIG_FILE = new File(args[++i]);
             } else if ("--rotate".equals(arg)) {
                 final double degrees = Double.parseDouble(args[++i]);

@@ -40,7 +40,7 @@ file's raw orientation flipped and then rotated.
 ## Command-line arguments
 
 ```
-java -jar infimg.jar [-0..-9 | --slot N] [--config PATH]
+java -jar infimg.jar [-0..-9 | --slot N] [-c|--config-file PATH]
                       [--rotate DEG] [--flip-hor] [--flip-ver]
                       [--lighter] [--darker] [--more-contrast] [--less-contrast]
                       [file ...]
@@ -55,7 +55,7 @@ java -jar infimg.jar [-0..-9 | --slot N] [--config PATH]
 - **`-0` through `-9`** (or **`--slot N`**, the same thing spelled out):
   which of the 10 window-position slots to open at — see "Window-position
   slots" below. No flag defaults to slot 0.
-- **`--config PATH`**: use `PATH` instead of `infimg.json` (MITSA app-data dir) for this run
+- **`-c PATH` / `--config-file PATH`**: use `PATH` instead of `infimg.json` (MITSA app-data dir) for this run
   — window slots, the ImageMagick flag, and the Look & Feel choice are all
   read from and written to `PATH` instead. Mainly for running more than
   one infimg instance side by side without them fighting over the same
@@ -369,6 +369,9 @@ attached (`.github/workflows/release.yml`).
 
 ## Changelog
 
+- **v1.8.1** — Renamed `--config` to `-c`/`--config-file` to match the
+  `-c`/`--config-file` convention now standard across this author's
+  other CLI tools.
 - **v1.8** — Added **Menu → Quad ΔE Overlay...**, a separate window
   showing a live CIELab ΔE quadtree overlay on the current image —
   recursively splits the image into boxes wherever colour isn't visually
