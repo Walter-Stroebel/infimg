@@ -149,6 +149,209 @@ complete, jargon-free description — the radius slider and colour-frequency
 figures are details of *that one screen*, not new concepts layered onto
 infimg's own toolbar/mental model.
 
+## Toolbar icons (added 2026-08-23)
+
+Every toolbar button now carries a real icon alongside its text label —
+Load, Save, Paste, Copy, Rectangle, Lasso, Rotate (wheel), Prev, Next,
+Fit, Menu, Exit — sourced from a growing catalog icon set the catalog
+session built and extended three times over the same day
+(`/home/claude/catalog/tools/src/main/resources/icons_svg`, now 43 icons;
+infimg's own vendored copy holds only the 26 names actually used here:
+the original "generic app chrome" set plus `marquee`/`lasso` for the
+selection tools and `copy`/`paste`/`rotate` added on request once Walter
+did a full toolbar pass and flagged the remaining text-only buttons).
+Same integration pattern as Pixel Microscope: `nl.infcomtec.icons.Icons`
+(`Icons.java`) and the `icons_svg` resource were copied verbatim into
+this repo rather than taken as a Maven dependency — confirmed directly by
+the catalog maintainer session as `catalog/`'s actual documented
+distribution convention project-wide ("a poor man's Maven Central, chosen
+deliberately"), not an infimg-specific workaround.
+
+`ImageView.toolbarIcon(String)` wraps `Icons.getIcon(name, 24, "#404040")`
+— fixed dark-gray backing square, not transparent or LAF-derived: the
+icon stroke color is hardcoded `#e0e0e0` light gray in the catalog set
+(see `ICON_STYLE.md`), so a dark backing rect is what gives it visible
+contrast. First pass used 16px on a transparent background and Walter
+immediately flagged it as "too black and too small" — a transparent rect
+exposes whatever's behind the button, which reads as low-contrast/
+blob-like at that stroke color and size, not as a crisp icon. Returns
+`null` on any miss — `Icons.getIcon` already logs the reason to stderr,
+and a `null` `Icon` just leaves a `JButton` as text-only, so no extra
+fallback handling was needed; this is also the rule for any future
+toolbar addition — check the icon set actually has a fitting name before
+wiring one in, a bad-fit icon reads as *more* confusing than a plain
+label, not less (this is why Magic Wand-adjacent or clipboard-shaped
+icons were never invented ad hoc here, only ever requested from the
+catalog session when a real gap was found).
+
+**Prev/Next needed an explicit `setDisabledIcon` call, not just an icon
+constructor argument.** Swing auto-generates a disabled-state icon via
+`GrayFilter` the first time `getDisabledIcon()` is read, and that filter
+collapses this icon set's already-light `#e0e0e0` stroke into a nearly
+featureless gray square — confirmed 2026-08-23 by rendering a disabled
+`JButton` offscreen and inspecting the actual pixels, not by guessing.
+`prevButton.setDisabledIcon(prevButton.getIcon())` (same for `nextButton`)
+skips that filter and just reuses the enabled icon, which reads fine —
+apply the same fix to any future icon-carrying button that can start (or
+go) disabled.
+
+**Confirmed 2026-08-23, not fixed: this icon set only reads well in a
+dark-background Look & Feel** (Darcula, FlatLaf Dark) — a light LAF
+(System Default, FlatLaf Light/IntelliJ) flattens the fixed `#404040`
+backing square and the light `#e0e0e0` stroke into a muddy, low-contrast
+gray toolbar, screenshot-confirmed by Walter. Investigated properly
+before deciding to ship anyway: this is exactly the problem FlatLaf's own
+`FlatSVGIcon`/`ColorFilter` mechanism exists to solve (recognizing a
+placeholder stroke color and remapping it per active theme, the same
+general pattern IntelliJ's `_dark.svg` suffix convention and VS Code's
+`currentColor`/CSS-variable icons use) — but that requires switching from
+`Icons.getIcon`'s ImageMagick-rasterize-to-PNG pipeline to FlatLaf's own
+SVG-aware icon class, and the catalog `icons_svg` set's literal `#e0e0e0`
+would need to become a recognized theme-aware placeholder rather than a
+baked-in color. That's a real, correctly-scoped future improvement, not
+attempted here — Walter's call (2026-08-23): "Ship without it,
+Darcula-only for now." Practically: **the icon toolbar assumes Menu →
+Look & Feel → FlatLaf Darcula (or another dark FlatLaf variant)**; if a
+future session revisits light-mode icon support, start from FlatLaf's
+`ColorFilter` docs/`FlatSVGIcon`, not another runtime color-inversion
+hack layered on the current ImageMagick pipeline — that was considered
+and rejected as the wrong layer to fix this in.
+
+(Dark mode also draws less power on an OLED/most modern panel — so
+Darcula-only is, in a small way, the environmentally responsible default
+too.)
+
+Needs ImageMagick's `convert` on PATH at runtime (icons rasterize via a
+subprocess call, cached in-memory by name+size+background) — same
+runtime assumption already carried by the optional `imageMagick`
+metadata feature (see "Feature scope" above), so this doesn't add a new
+kind of dependency to the app, just a second use of one already gated by
+presence-checking rather than being bundled.
+
+## Rectangle/Lasso selection (added 2026-08-23)
+
+Toolbar gains two mutually-exclusive `JToggleButton`s, Rectangle and Lasso,
+next to Copy. When one is armed and a selection is committed (a completed
+rectangle drag, or a lasso closed by clicking near its first vertex —
+right-click undoes the last placed vertex), Save and Copy operate on that
+selection instead of the full view: cropped to the selection's bounding
+box, with any area inside that box but outside the actual selected shape
+(the lasso's non-rectangular slack) painted solid black. Toggling a tool
+off then back on — or switching to the other tool — is the reset gesture;
+there's no separate Clear/Reset button, matching the toolbar's existing
+"each toggle watches its sibling" idiom (`SelectionToolToggle`,
+mirroring `ImageView`'s pre-existing pattern for Look & Feel-adjacent
+toggles).
+
+**Explicitly out of scope**: Magic Wand / flood-fill selection. Walter's
+own words when scoping this: "No magic wand, that's a nice 'extra catch'
+but the core lasso/rect refinement... is new to it." Only Rectangle and
+Lasso exist here — the vendored `SelectionMasks.java` had its
+`fromFloodFill` factory (and the `ColorToleranceCondition`/`MaskContour`
+classes it and the wand-only contour-outline drawing depend on) stripped
+out during vendoring for exactly this reason, not left in unused.
+
+**Vendored, not a Maven dependency** — same distribution model as Pixel
+Microscope and the toolbar icons: `catalog/selection`
+(`nl.infcomtec.selection`: `RubberBandLine`, `VertexLasso`, `PointMapper`,
+`XorDrawing`, a trimmed `SelectionMasks`) and the two classes of
+`catalog/images` it depends on (`nl.wers.library.images.BitSet2D`,
+`MaskComposite`) were copied verbatim into this repo's own package tree.
+Confirmed directly by the catalog maintainer session afterward: this
+vendor-by-copy approach is `catalog/`'s actual documented distribution
+convention project-wide (see `catalog/INDEX.md`, "a poor man's Maven
+Central, chosen deliberately"), not an infimg-specific workaround — the
+same session had originally (and incorrectly) suggested a Maven
+dependency for the icons integration before correcting itself.
+`RubberBandBox` was vendored too at first but removed once nothing in
+this repo called it any more (see "Selection is paint-mode, not XOR"
+below) — a straight port of `SelectionToolsDemo.java`'s wiring, XOR mode
+included, shipped first and got corrected live against real feedback.
+
+**Coordinate space is deliberately trivial**: selection lives entirely in
+`ImageCanvas`'s own component space via an identity `PointMapper`
+(`ImageCanvas.IdentityPointMapper`) — no mapping through the zoom/
+rotation/pan `AffineTransform` at all, because Save/Copy already operate
+on `renderCurrentView()`'s rasterized output (see that method's own doc),
+which *is* component space. A selection dragged out on screen therefore
+maps 1:1 onto exactly the pixels Save/Copy would otherwise write, with no
+separate coordinate transform to keep in sync with `paintComponent`'s.
+
+**Selection outlines are paint-mode, not XOR** (corrected 2026-08-23,
+after initially following `SelectionToolsDemo.java`'s XOR wiring
+line-for-line): `Graphics2D#setXORMode` draws `background XOR color`, not
+`color` — against a light background that XOR result happens to look
+close to the chosen color, but against a dark image region it can land on
+a completely different, much less visible hue (confirmed live: yellow
+selection lines went near-invisible blue-gray over a dark truck in
+Walter's real test image). The committed rectangle outline, the lasso's
+placed segments/closing edge/vertex dots/close-tolerance ring, and the
+live "next vertex" guide line are all drawn as ordinary paint-mode shapes
+fresh in `paintComponent` (`ImageCanvas.drawRectangleOverlay`/
+`drawLassoOverlay`), not XOR — driven by plain fields (`rectAnchor`/
+`rectCursor`, `lassoCursor`) updated on `mouseMoved`/`mouseDragged` plus
+`repaint()`, the same pattern the canvas already used for panning. This
+is also why the vendored `RubberBandBox` and `VertexLasso`'s own
+`updateCursor`/`drawPlacedSegments` methods are unused/removed: mixing a
+paint-mode `repaint()` (which redraws the whole canvas from scratch,
+erasing XOR content without pairing it with the matching XOR erase call)
+with XOR bookkeeping desyncs the erase/redraw pairing that XOR mode
+depends on — confirmed as a real bug twice (the lasso's live guide line,
+then the rectangle's XOR crosshair below), not a hypothetical concern.
+
+**Rectangle mode's crosshair ruler genuinely is XOR, on purpose** — the
+one deliberate exception to the above. Once Rectangle is armed, a
+full-width/full-height yellow line pair follows the cursor continuously
+(not just while dragging), via real `Graphics2D#setXORMode` erase/redraw
+against `getGraphics()` (`ImageCanvas.crosshairPos`/`updateCrosshair`/
+`eraseCrosshair`). Walter's own framing for why this needed to exist
+(2026-08-23): it's a ruler for placing the *first* corner precisely
+("'I want the box to pass just over her head and in front of her tits'
+is now VISIBLE due to the XOR lines... then dragging the box... is
+automatic") — ordinary mouse-position feedback, not the selection outline
+itself, and genuinely too cheap-per-pixel-of-movement to justify a full
+repaint the way the outline drawing is. Because a rectangle drag's own
+paint-mode repaint (for the drag-rectangle outline) can invalidate the
+crosshair's last-drawn position the same way a lasso click's repaint
+once did, every call site that repaints during Rectangle mode
+(`handleSelectionPress`, `mouseDragged`, `handleRectangleRelease`) forces
+that repaint synchronously via `paintImmediately` first, then resets
+`crosshairPos` to null and redraws fresh — the same erase-desync class of
+bug as the lasso's, fixed the same way, just for a genuinely-XOR field
+instead of a paint-mode one this time.
+
+Mouse-handling wiring otherwise still follows
+`catalog/demos/SelectionToolsDemo.java`'s general shape (press/drag/
+release, click-sequence lasso, the `clearAnchor()`-not-`begin(null)`
+gotcha) where the two apps' shapes actually match — that demo remains
+the validated reference implementation for the *interaction sequence*,
+just not for its XOR-vs-paint-mode drawing choices, which infimg's real
+test image proved wrong for this app's use case (arbitrary photo
+content, not the demo's flat-color test image).
+
+**Save/Copy/Paste/Load share one mutable image list** (`ImageView.
+imageList`/`imageIndex`, redesigned 2026-08-23 after an initial two-
+parallel-lists version — one for command-line files, one for paste
+history — that Walter flagged as over-complicated: "prev/next should
+operate over a shared single and mutable list of images, a list element
+should 'know' its source"). Each `ImageEntry` is either file-backed
+(`file` set, reloadable from disk any time) or an unsaved paste
+(`pastedImage` holding the actual pixels, since there's nothing on disk
+to reload from). Load (toolbar button, recent-files menu) and Paste both
+insert a new entry right after the current one, truncating anything
+after it first — same "new branch abandons the old redo tail" rule as a
+text editor's undo stack — rather than either overwriting the current
+view or blindly appending past a point the user had stepped back to.
+Save converts the *current* entry to file-backed in place (sets `file`,
+clears `pastedImage`) — Walter's words: "Save will REPLACE that with
+'new on disk' location in both cases" (paste and file entries alike) —
+so stepping back to that entry later with Prev/Next reloads from the
+just-written file, not stale in-memory pixels or the file's old
+location. `--rotate`/`--flip-*`/etc. CLI flags still apply once, to the
+first entry only, via `ImageView.loadInitialFiles`, which seeds the
+whole list from argv up front so Prev/Next work across all of them
+immediately (not lazily discovered one file at a time).
+
 ## Java Style — Non-Negotiable
 (Identical standing rule across this author's Java projects — see
 Voynich's `CLAUDE.md` for the fuller rationale/history behind each point;

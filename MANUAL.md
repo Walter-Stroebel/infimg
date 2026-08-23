@@ -7,18 +7,41 @@ Feature-by-feature reference. For the pitch and build instructions, see
 
 | Button | Does |
 |---|---|
-| Load | Open an image file via the OS file chooser. If the file has an EXIF orientation tag (most phone camera JPEGs do), the image is automatically rotated to display upright — matching what Nemo, Photos, and browsers already show you, rather than the raw sensor pixels. The read runs in the background, so a slow source (a NAS share has been the noticeable real case) shows a large "Loading" placeholder instead of freezing the window. |
-| ▾ | Pops up the last 10 files opened (most recent first); click one to load it directly, skipping the file chooser. |
-| Save | Write exactly the current on-screen pixels (zoom, rotation, pan, crop all baked in) to a new file. |
-| Paste | Load whatever image is on the system clipboard. |
-| Copy | Copy exactly the current on-screen pixels to the system clipboard. |
+| Load | Open an image file via the OS file chooser, inserted as a new entry in the shared image list (see Prev/Next below) right after whatever's currently shown — not replacing the list, and not necessarily appended at the end if you've stepped back with Prev first. If the file has an EXIF orientation tag (most phone camera JPEGs do), the image is automatically rotated to display upright — matching what Nemo, Photos, and browsers already show you, rather than the raw sensor pixels. The read runs in the background, so a slow source (a NAS share has been the noticeable real case) shows a large "Loading" placeholder instead of freezing the window. |
+| ▾ | Pops up the last 10 files opened (most recent first); click one to load it directly (same new-list-entry behavior as Load), skipping the file chooser. Entries for files no longer on disk are dropped automatically each time this opens — no dead links to click. |
+| Save | Write exactly the current on-screen pixels — or, if Rectangle/Lasso has a selection committed, just that selection cropped to its bounds — to a file you pick. Also updates the currently-shown list entry to point at that file, so Prev/Next back to it later reloads from the just-saved location rather than old in-memory pixels or a stale path. |
+| Paste | Load whatever image is on the system clipboard as a **new** entry in the image list, right after whatever's currently shown (same insert-and-truncate-forward behavior as Load) — never overwrites what's on screen. Copy a selection, then Paste, to see exactly what a crop/composite will look like before deciding to Save it — Prev takes you straight back to the original. |
+| Copy | Copy exactly the current on-screen pixels — or the committed Rectangle/Lasso selection, cropped to its bounds — to the system clipboard. |
+| Rectangle / Lasso | Selection tools, mutually exclusive (picking one turns the other off; re-clicking the active one off then on resets it). **Rectangle**: click-drag a box; while armed, a full-width/full-height crosshair follows the cursor as a placement ruler, even before you click. **Lasso**: click to place vertices, click again near the first one (a highlighted ring shows exactly how close counts) to close the shape; right-click undoes the last vertex. Either way, once a selection is committed, Save and Copy act on it instead of the full view until you clear or switch tools. See "Selection tools" below for more. |
 | Rotate (wheel) | Toggle — when down, the mouse wheel rotates the image through an arbitrary angle instead of zooming it. A live degree label (e.g. "45°") sits right next to this button, always showing the current rotation, however it got there — wheel or Menu → Rotate. |
-| Prev / Next | Step to the previous/next file among those given on the command line, in the order they were listed there. Disabled (greyed out) unless infimg was launched with more than one file. Plain navigation only — any `--rotate`/`--flip-*`/`--lighter`/etc. flags given at launch (see "Command-line arguments" below) apply once, to the first file shown, not to every file you step to. |
+| Prev / Next | Step backward/forward through the shared image list — every file you've loaded and every image you've pasted, in the order you visited them, not two separate histories. Disabled (greyed out) at either end of the list. Any `--rotate`/`--flip-*`/`--lighter`/etc. flags given at launch (see "Command-line arguments" below) apply once, to the first file shown, not to every entry you step to. |
 | Fit | Rescale and re-center to fill the window as it is now, showing the entire image at whatever angle it's currently rotated to — for after a manual resize, a wandered-off zoom/pan, or a rotation. At an angle like 45° the image's corners swing wider than its own width/height, so Fit zooms out further there than at 0°/90° — that's correct, not a bug, since the whole rotated image genuinely takes up more on-screen room. |
 | Menu | Everything below this line. |
 | Exit | Close with no "unsaved changes?" nag — Save first if you want the current view kept. |
 
 Click-drag pans; mouse wheel zooms (or rotates, with the toggle down).
+
+### Selection tools
+
+**Rectangle** and **Lasso** (toolbar, next to Copy) let Save/Copy act on
+part of the image instead of the whole view — crop out just the region
+you want, without leaving infimg. Once a selection is committed (a
+finished rectangle drag, or a closed lasso), Save writes just that region
+(cropped to its bounding box) and Copy puts just that region on the
+clipboard; anything inside the crop box but outside the actual selected
+shape (the lasso's non-rectangular slack) is filled solid black.
+
+Selecting, then Copy, then Paste is the way to preview a crop before
+committing to Save — Paste never overwrites the original, it adds a new
+entry to the image list (see Paste above), so Prev always gets you back.
+
+Switching images (Load, Paste, Prev/Next) always clears any active
+selection — a selection's coordinates belong to the picture it was drawn
+on, not the next one you look at.
+
+Magic Wand / flood-fill selection is intentionally not offered — Rectangle
+and Lasso cover the "grab this region" case this tool is meant for,
+without growing into a general-purpose image editor.
 
 **Menu → Rotate 90° / 180° / 270°** are quick exact square-ups — for
 photos or scans that just need to be turned a quarter-turn or flipped
@@ -278,6 +301,14 @@ especially) look noticeably dated compared to FlatLaf's pure-Swing
 rendering. This only affects a config with no stored choice yet; picking
 anything via Menu always sticks, on any platform.
 
+**A dark FlatLaf theme (Darcula or Dark) is recommended for another
+reason too**: the toolbar's icons are drawn light-on-dark and only read
+cleanly against a dark background — under a light theme (System Default,
+FlatLaf Light/IntelliJ) they flatten into low-contrast gray squares. Not
+a bug being chased right now; if it bothers you, switch to Darcula. (And
+hey — dark mode draws a little less power on most modern screens, so
+consider it the environmentally responsible choice too.)
+
 ### Pixel Microscope
 
 **Menu → Pixel Microscope...** opens a separate window for zooming into
@@ -369,6 +400,18 @@ attached (`.github/workflows/release.yml`).
 
 ## Changelog
 
+- **v1.10** — Added **Rectangle** and **Lasso** selection tools: Save/Copy
+  act on a committed selection (cropped to its bounds) instead of the full
+  view. Load/Save/Paste/Prev/Next were redesigned around a single shared,
+  mutable image list — every load and paste is its own entry, Save
+  updates the current entry to point at the new file location, and Paste
+  no longer overwrites what's on screen (it inserts a new entry, so a
+  Copy'd selection can be Paste'd to preview it and Prev always gets you
+  back). Every toolbar button now has an icon; the icon set is designed
+  for a dark theme, so Menu → Look & Feel → a FlatLaf Dark/Darcula theme
+  is recommended (a light theme still works, the icons just read as
+  low-contrast gray squares — a known, accepted limitation, not a bug
+  being tracked).
 - **v1.9** — Renamed `--config` to `-c`/`--config-file` to match the
   `-c`/`--config-file` convention now standard across this author's
   other CLI tools.

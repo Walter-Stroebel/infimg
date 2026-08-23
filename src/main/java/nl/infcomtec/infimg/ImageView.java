@@ -9,6 +9,7 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
@@ -29,6 +30,7 @@ import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.imageio.ImageIO;
@@ -43,8 +45,15 @@ import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
+import javax.swing.Icon;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import nl.infcomtec.icons.Icons;
+import nl.infcomtec.selection.PointMapper;
+import nl.infcomtec.selection.SelectionMasks;
+import nl.infcomtec.selection.VertexLasso;
+import nl.wers.library.images.BitSet2D;
+import nl.wers.library.images.MaskComposite;
 
 /**
  * Standalone, OS-agnostic image viewer: fit-to-window load (rescaled up or
@@ -184,10 +193,7 @@ public final class ImageView extends JFrame {
                 ImageView view = new ImageView(startSlot);
                 view.setVisible(true);
                 if (!files.isEmpty()) {
-                    view.fileList = files;
-                    view.fileIndex = 0;
-                    view.updateNavButtons();
-                    view.load(files.get(0), ops);
+                    view.loadInitialFiles(files, ops);
                 }
             }
         });
@@ -253,16 +259,28 @@ public final class ImageView extends JFrame {
     /** Which of the 10 remembered window-position slots this instance tracks on move/resize. */
     private int activeSlot;
 
-    /** Steps to the previous file in {@link #fileList} — enabled only past the first file. */
+    /** Steps to the previous entry in {@link #imageList} — enabled only past the first entry. */
     private JButton prevButton;
 
-    /** Steps to the next file in {@link #fileList} — enabled only before the last file. */
+    /** Steps to the next entry in {@link #imageList} — enabled only before the last entry. */
     private JButton nextButton;
 
-    /** Enables/disables {@link #prevButton}/{@link #nextButton} per {@link #fileIndex}'s position in {@link #fileList} — called after {@link #fileList} changes and after every {@link #loadNext}/{@link #loadPrevious}. */
+    /** Enables/disables {@link #prevButton}/{@link #nextButton} per {@link #imageIndex}'s position in {@link #imageList} — called after {@link #imageList} changes and after every {@link #loadNext}/{@link #loadPrevious}/{@link #pasteFromClipboard}. */
     private void updateNavButtons() {
-        prevButton.setEnabled(fileIndex > 0);
-        nextButton.setEnabled(fileIndex + 1 < fileList.size());
+        prevButton.setEnabled(imageIndex > 0);
+        nextButton.setEnabled(imageIndex + 1 < imageList.size());
+    }
+
+    /**
+     * Looks up a toolbar icon by name from the {@code nl.infcomtec.icons}
+     * catalog module (copied into this repo, same pattern as the Pixel
+     * Microscope import — see this file's class doc). Needs ImageMagick's
+     * {@code convert} on PATH at runtime; returns {@code null} (leaving the
+     * button as text-only) if it's missing or the name isn't in the set,
+     * since {@link Icons#getIcon} already logs the reason to stderr.
+     */
+    private static Icon toolbarIcon(String name) {
+        return Icons.getIcon(name, 24, "#404040");
     }
 
     public ImageView(int startSlot) {
@@ -273,7 +291,7 @@ public final class ImageView extends JFrame {
         JToolBar toolBar = new JToolBar();
         toolBar.setFloatable(false);
 
-        JButton loadButton = new JButton("Load");
+        JButton loadButton = new JButton("Load", toolbarIcon("folder"));
         loadButton.setToolTipText("Open an image file");
         loadButton.addActionListener(new ActionListener() {
             @Override
@@ -298,7 +316,7 @@ public final class ImageView extends JFrame {
         });
         toolBar.add(recentButton);
 
-        JButton saveButton = new JButton("Save");
+        JButton saveButton = new JButton("Save", toolbarIcon("save"));
         saveButton.setToolTipText("Save exactly the current view (zoom, rotation, pan) to a new image file");
         saveButton.addActionListener(new ActionListener() {
             @Override
@@ -308,8 +326,8 @@ public final class ImageView extends JFrame {
         });
         toolBar.add(saveButton);
 
-        JButton pasteButton = new JButton("Paste");
-        pasteButton.setToolTipText("Load the image currently on the system clipboard");
+        JButton pasteButton = new JButton("Paste", toolbarIcon("paste"));
+        pasteButton.setToolTipText("Load the image currently on the system clipboard as a new Prev/Next entry, without overwriting what's on screen");
         pasteButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -318,7 +336,7 @@ public final class ImageView extends JFrame {
         });
         toolBar.add(pasteButton);
 
-        JButton copyButton = new JButton("Copy");
+        JButton copyButton = new JButton("Copy", toolbarIcon("copy"));
         copyButton.setToolTipText("Copy exactly the current view (zoom, rotation, pan) to the system clipboard");
         copyButton.addActionListener(new ActionListener() {
             @Override
@@ -329,7 +347,17 @@ public final class ImageView extends JFrame {
         toolBar.add(copyButton);
         toolBar.addSeparator();
 
-        final JToggleButton rotateToggle = new JToggleButton("Rotate (wheel)");
+        final JToggleButton rectSelectButton = new JToggleButton("Rectangle", toolbarIcon("marquee"));
+        rectSelectButton.setToolTipText("Drag a rectangle; Save/Copy then act on it, cropped to its bounds, until cleared");
+        final JToggleButton lassoSelectButton = new JToggleButton("Lasso", toolbarIcon("lasso"));
+        lassoSelectButton.setToolTipText("Click to place vertices, click near the first one to close; Save/Copy then act on the closed shape, cropped to its bounds, until cleared");
+        rectSelectButton.addActionListener(new SelectionToolToggle(rectSelectButton, lassoSelectButton, ImageCanvas.SelectionMode.RECTANGLE));
+        lassoSelectButton.addActionListener(new SelectionToolToggle(lassoSelectButton, rectSelectButton, ImageCanvas.SelectionMode.LASSO));
+        toolBar.add(rectSelectButton);
+        toolBar.add(lassoSelectButton);
+        toolBar.addSeparator();
+
+        final JToggleButton rotateToggle = new JToggleButton("Rotate (wheel)", toolbarIcon("rotate"));
         rotateToggle.setToolTipText("When down, the mouse wheel rotates the image instead of zooming it");
         rotateToggle.addActionListener(new ActionListener() {
             @Override
@@ -354,7 +382,15 @@ public final class ImageView extends JFrame {
         };
         toolBar.add(rotationLabel);
 
-        prevButton = new JButton("Prev");
+        prevButton = new JButton("Prev", toolbarIcon("back"));
+        // Prev/Next start disabled (see setEnabled(false) below) — Swing's
+        // default disabled-icon generation (AbstractButton auto-applies
+        // GrayFilter the first time getDisabledIcon() is read) desaturates
+        // this icon set's already-light #e0e0e0 stroke into a nearly
+        // featureless gray square, confirmed 2026-08-23 by rendering a
+        // disabled JButton offscreen and inspecting the actual pixels —
+        // reusing the enabled icon here skips that filter entirely.
+        prevButton.setDisabledIcon(prevButton.getIcon());
         prevButton.setToolTipText("Load the previous file from the command-line file list");
         prevButton.setEnabled(false);
         prevButton.addActionListener(new ActionListener() {
@@ -366,7 +402,8 @@ public final class ImageView extends JFrame {
         });
         toolBar.add(prevButton);
 
-        nextButton = new JButton("Next");
+        nextButton = new JButton("Next", toolbarIcon("forward"));
+        nextButton.setDisabledIcon(nextButton.getIcon());
         nextButton.setToolTipText("Load the next file from the command-line file list");
         nextButton.setEnabled(false);
         nextButton.addActionListener(new ActionListener() {
@@ -378,7 +415,7 @@ public final class ImageView extends JFrame {
         });
         toolBar.add(nextButton);
 
-        JButton fitButton = new JButton("Fit");
+        JButton fitButton = new JButton("Fit", toolbarIcon("refresh"));
         fitButton.setToolTipText("Rescale and re-center to fill the window as it is now"
                 + " — for after a manual resize or a wandered-off zoom/pan");
         fitButton.addActionListener(new ActionListener() {
@@ -391,7 +428,7 @@ public final class ImageView extends JFrame {
 
         toolBar.add(Box.createHorizontalGlue());
 
-        final JButton menuButton = new JButton("Menu");
+        final JButton menuButton = new JButton("Menu", toolbarIcon("menu"));
         menuButton.setToolTipText("More features, tucked away so the main toolbar stays simple");
         menuButton.addActionListener(new ActionListener() {
             @Override
@@ -401,7 +438,7 @@ public final class ImageView extends JFrame {
         });
         toolBar.add(menuButton);
 
-        JButton exitButton = new JButton("Exit");
+        JButton exitButton = new JButton("Exit", toolbarIcon("close"));
         exitButton.setToolTipText("Close this viewer — no unsaved-changes prompt, use Save first if you want this exact view kept");
         exitButton.addActionListener(new ActionListener() {
             @Override
@@ -1043,9 +1080,32 @@ public final class ImageView extends JFrame {
         writeConfig(cfg);
     }
 
-    /** Pops up {@link AppConfig#recentFiles} as a menu below {@code invoker}, most-recent first. */
+    /**
+     * Pops up {@link AppConfig#recentFiles} as a menu below {@code
+     * invoker}, most-recent first — pruning any entry whose file no
+     * longer exists first (capped at {@link #RECENT_FILES_MAX}, so at
+     * most 10 cheap {@link File#exists()} probes per open) and persisting
+     * that prune, so a deleted/moved file's entry doesn't sit in the
+     * dropdown forever, clickable but guaranteed to fail. Confirmed as a
+     * real gap 2026-08-23 (Walter: "what happens with the 'recent file
+     * list' when the images are gone from disk?") — the list previously
+     * only ever grew, on every successful load, never checked or shrunk.
+     */
     private void showRecentFilesMenu(java.awt.Component invoker) {
-        java.util.List<String> recent = loadConfig().recentFiles;
+        AppConfig cfg = loadConfig();
+        java.util.List<String> recent = new java.util.ArrayList<String>();
+        boolean pruned = false;
+        for (String path : cfg.recentFiles) {
+            if (new File(path).exists()) {
+                recent.add(path);
+            } else {
+                pruned = true;
+            }
+        }
+        if (pruned) {
+            cfg.recentFiles = recent;
+            writeConfig(cfg);
+        }
         javax.swing.JPopupMenu popup = new javax.swing.JPopupMenu();
         if (recent.isEmpty()) {
             JMenuItem empty = new JMenuItem("(no recent files)");
@@ -1130,16 +1190,59 @@ public final class ImageView extends JFrame {
         public int height;
     }
 
-    /** Backing file of what's currently loaded, or null (e.g. after {@link #pasteFromClipboard}) — needed by menu features like Metadata that shell out to a file-based external tool. */
+    /**
+     * One entry in {@link #imageList}: either a file loaded from disk
+     * ({@link #file} non-null, {@link #pastedImage} null — reloadable from
+     * disk any time) or an as-yet-unsaved clipboard paste ({@link #file}
+     * null, {@link #pastedImage} holding the actual pixels since there's no
+     * disk copy to reload from). {@link #save} converts a paste entry into
+     * a file entry in place (sets {@link #file}, clears {@link
+     * #pastedImage}) rather than creating a separate "saved" entry type —
+     * once a paste is saved, disk is authoritative for it exactly like any
+     * other file entry, so there is no third state to model.
+     */
+    private static final class ImageEntry {
+
+        public File file;
+        public BufferedImage pastedImage;
+        public final long pasteTimeMillis;
+
+        /** A file-backed entry, loaded from or (after {@link #save}) saved to disk. */
+        ImageEntry(File file) {
+            this.file = file;
+            this.pasteTimeMillis = 0L;
+        }
+
+        /** An unsaved clipboard-paste entry. */
+        ImageEntry(BufferedImage pastedImage, long pasteTimeMillis) {
+            this.pastedImage = pastedImage;
+            this.pasteTimeMillis = pasteTimeMillis;
+        }
+    }
+
+    /**
+     * Single shared, mutable list Prev/Next step through — command-line
+     * files in argv order, with each clipboard paste inserted right after
+     * whatever entry was current at paste time (truncating any later
+     * entries first, same "new branch abandons the old redo tail" rule as
+     * a text editor's undo stack). Files and pastes were originally two
+     * separate parallel lists (fileList/fileIndex plus a pasteHistory);
+     * Walter flagged that as over-complicated (2026-08-23: "prev/next
+     * should operate over a shared single and mutable list of images, a
+     * list element should know its source") and asked that {@link #save}
+     * convert the current entry to file-backed in place rather than the
+     * two spaces staying disjoint — this list and {@link #imageIndex} are
+     * that redesign.
+     */
+    private final java.util.List<ImageEntry> imageList = new java.util.ArrayList<>();
+
+    /** Index into {@link #imageList} of whatever's currently on screen, or -1 before anything has been loaded/pasted. */
+    private int imageIndex = -1;
+
+    /** {@link #imageList}{@code [}{@link #imageIndex}{@code ].file} — null when the current entry is an unsaved paste; needed by menu features like Metadata that shell out to a file-based external tool. */
     private File currentFile;
 
-    /** Files given on the command line, in argv order — what {@link #loadNext}/{@link #loadPrevious} step through. Empty when infimg was launched with no file, or exactly one. */
-    private java.util.List<File> fileList = java.util.Collections.emptyList();
-
-    /** Index into {@link #fileList} of whatever's currently on screen. */
-    private int fileIndex;
-
-    /** When {@link #currentFile} is null because the current image came from {@link #pasteFromClipboard}, the epoch-millisecond paste time — Metadata's stand-in for a last-modified timestamp, since a clipboard image has no file. Meaningless (and unread) whenever {@link #currentFile} is non-null. */
+    /** {@link #imageList}{@code [}{@link #imageIndex}{@code ].pasteTimeMillis} — meaningless (and unread) whenever {@link #currentFile} is non-null. */
     private long pasteTimeMillis;
 
     /** Title without any "*" (modified) marker — {@link #markModified} appends to this, never to {@link #getTitle}, so it can't accumulate multiple stars. */
@@ -1168,22 +1271,67 @@ public final class ImageView extends JFrame {
     }
 
     /**
-     * Reads {@code file} and displays it. The read itself runs on a
-     * background thread via {@link SwingWorker} — not the EDT — so a slow
-     * source (a NAS share over CIFS has been the noticeable case) blocks
-     * only that worker thread, leaving the EDT free to actually paint the
-     * "Loading" placeholder ({@link ImageCanvas#loading}, set before the
-     * worker starts) instead of freezing the whole window for however
-     * long the read takes. {@link SwingWorker#done()} always runs back on
-     * the EDT, which is where the loaded image (or the failure dialog)
-     * gets applied.
+     * Opens {@code file} as a new entry — inserted right after {@link
+     * #imageIndex} (truncating any later entries, same redo-tail rule as
+     * {@link #pasteFromClipboard}) — and displays it. Used by the Load
+     * button and the recent-files menu, where the user is directing
+     * infimg to a specific file rather than stepping through an existing
+     * list.
      */
     private void load(final File file) {
-        load(file, java.util.Collections.<CliOp>emptyList());
+        ImageEntry entry = new ImageEntry(file);
+        int insertAt = imageIndex + 1;
+        while (imageList.size() > insertAt) {
+            imageList.remove(imageList.size() - 1);
+        }
+        imageList.add(entry);
+        imageIndex = insertAt;
+        showEntry(entry, java.util.Collections.<CliOp>emptyList());
     }
 
-    /** Same as {@link #load(File)}, but runs {@code ops} once, in order, right after the image is on screen — used only by {@link #main} for the initial file's {@code --rotate}/{@code --flip-hor}/etc. flags. */
-    private void load(final File file, final java.util.List<CliOp> ops) {
+    /**
+     * Seeds {@link #imageList} from {@code files} (in order, replacing
+     * whatever it held) and displays the first one, running {@code ops}
+     * once right after — used only by {@link #main} for the initial
+     * command-line file list and its {@code --rotate}/{@code --flip-hor}/
+     * etc. flags.
+     */
+    private void loadInitialFiles(final java.util.List<File> files, final java.util.List<CliOp> ops) {
+        imageList.clear();
+        for (File file : files) {
+            imageList.add(new ImageEntry(file));
+        }
+        imageIndex = 0;
+        updateNavButtons();
+        showEntry(imageList.get(0), ops);
+    }
+
+    /**
+     * Displays {@code entry}: a background {@link SwingWorker} disk read
+     * for a file-backed entry (not the EDT — a slow source, a NAS share
+     * over CIFS has been the noticeable case, blocks only that worker
+     * thread, leaving the EDT free to paint the "Loading" placeholder,
+     * {@link ImageCanvas#loading}, instead of freezing the whole window),
+     * or a synchronous in-memory swap for a paste — there is no disk read
+     * to background for pixels already sitting in {@link
+     * ImageEntry#pastedImage}. Does not touch {@link #imageIndex} or
+     * {@link #imageList} — callers own that, since a fresh load/paste and
+     * a Prev/Next step both need different index math.
+     */
+    private void showEntry(final ImageEntry entry) {
+        showEntry(entry, java.util.Collections.<CliOp>emptyList());
+    }
+
+    private void showEntry(final ImageEntry entry, final java.util.List<CliOp> ops) {
+        if (null != entry.pastedImage) {
+            canvas.setImage(entry.pastedImage);
+            currentFile = null;
+            pasteTimeMillis = entry.pasteTimeMillis;
+            setBaseTitle(String.format("(clip) %tH:%<tM:%<tS.%<tL", pasteTimeMillis));
+            updateNavButtons();
+            return;
+        }
+        final File file = entry.file;
         canvas.loading = true;
         canvas.repaint();
         new SwingWorker<BufferedImage, Void>() {
@@ -1219,6 +1367,7 @@ public final class ImageView extends JFrame {
                     currentFile = file;
                     setBaseTitle(file.getName());
                     recordRecentFile(file);
+                    updateNavButtons();
                     for (CliOp op : ops) {
                         op.apply(ImageView.this);
                     }
@@ -1231,19 +1380,19 @@ public final class ImageView extends JFrame {
         }.execute();
     }
 
-    /** Loads {@link #fileList}{@code [}{@link #fileIndex}{@code + 1]} — the file after whatever's on screen, in the order given on the command line. No-op (button stays disabled) at the last file or when infimg wasn't launched with a file list. */
+    /** Steps forward one entry in {@link #imageList}. No-op (button stays disabled) at the last entry — see {@link #updateNavButtons}. */
     private void loadNext() {
-        if (fileIndex + 1 < fileList.size()) {
-            fileIndex++;
-            load(fileList.get(fileIndex));
+        if (imageIndex + 1 < imageList.size()) {
+            imageIndex++;
+            showEntry(imageList.get(imageIndex));
         }
     }
 
-    /** Loads {@link #fileList}{@code [}{@link #fileIndex}{@code - 1]} — the file before whatever's on screen. No-op at the first file or when infimg wasn't launched with a file list. */
+    /** Steps backward one entry — see {@link #loadNext}. */
     private void loadPrevious() {
-        if (fileIndex > 0) {
-            fileIndex--;
-            load(fileList.get(fileIndex));
+        if (imageIndex > 0) {
+            imageIndex--;
+            showEntry(imageList.get(imageIndex));
         }
     }
 
@@ -1445,6 +1594,49 @@ public final class ImageView extends JFrame {
         return bigEndian ? (b0 << 24) | (b1 << 16) | (b2 << 8) | b3 : (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
     }
 
+    /**
+     * Watches the other selection-tool button and turns it off when this one
+     * is pressed on — same "each toggle watches its sibling, no separate
+     * Reset button" pattern as {@code catalog/demos}' {@code
+     * SelectionToolsDemo}. Pressing the already-active tool's button off,
+     * then back on, is the reset gesture: {@link ImageCanvas#setSelectionMode}
+     * always starts that tool fresh.
+     */
+    private final class SelectionToolToggle implements ActionListener {
+
+        private final JToggleButton self;
+        private final JToggleButton other;
+        private final ImageCanvas.SelectionMode mode;
+
+        SelectionToolToggle(JToggleButton self, JToggleButton other, ImageCanvas.SelectionMode mode) {
+            this.self = self;
+            this.other = other;
+            this.mode = mode;
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            if (!self.isSelected()) {
+                canvas.setSelectionMode(ImageCanvas.SelectionMode.NONE);
+                return;
+            }
+            other.setSelected(false);
+            canvas.setSelectionMode(mode);
+        }
+    }
+
+    /**
+     * Writes the current view (or its active selection crop, see {@link
+     * #renderOutput}) to a file the user picks, then updates the current
+     * {@link #imageList} entry in place to point at that file — a paste
+     * becomes file-backed, a file entry's {@link ImageEntry#file} moves to
+     * the new location — so Prev/Next back to this entry later reloads
+     * from the just-written file rather than the old in-memory pixels or
+     * the file's previous location. Walter's own framing (2026-08-23):
+     * "Save will REPLACE that with 'new on disk' location in both cases"
+     * (paste and file entries alike), part of the same single-list
+     * redesign as {@link #imageList} itself.
+     */
     private void save() {
         if (null == canvas.source) {
             JOptionPane.showMessageDialog(this, "No image loaded", "Save failed", JOptionPane.ERROR_MESSAGE);
@@ -1458,10 +1650,41 @@ public final class ImageView extends JFrame {
         String name = file.getName();
         String format = name.contains(".") ? name.substring(name.lastIndexOf('.') + 1) : "png";
         try {
-            ImageIO.write(renderCurrentView(), format, file);
+            ImageIO.write(renderOutput(), format, file);
+            if (imageIndex >= 0) {
+                ImageEntry entry = imageList.get(imageIndex);
+                entry.file = file;
+                entry.pastedImage = null;
+            }
+            currentFile = file;
+            setBaseTitle(file.getName());
+            recordRecentFile(file);
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Save failed", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    /**
+     * Save/Copy's actual source: {@link #renderCurrentView} cropped to the
+     * active selection's bounding box (with any masked-out area within that
+     * box painted solid black) when the Rectangle/Lasso tool has a committed
+     * selection, otherwise the full current view unchanged — this is the one
+     * place both {@link #save} and {@link #copyToClipboard} branch on
+     * whether a selection exists, so they can't drift out of sync on that
+     * decision.
+     */
+    private BufferedImage renderOutput() {
+        BufferedImage view = renderCurrentView();
+        BitSet2D mask = canvas.getCommittedSelectionMask();
+        if (null == mask) {
+            return view;
+        }
+        BufferedImage masked = MaskComposite.applySolidOutside(view, mask, Color.BLACK);
+        Rectangle bounds = mask.getRealBounds().intersection(new Rectangle(0, 0, view.getWidth(), view.getHeight()));
+        if (bounds.isEmpty()) {
+            return masked;
+        }
+        return masked.getSubimage(bounds.x, bounds.y, bounds.width, bounds.height);
     }
 
     /**
@@ -1478,11 +1701,30 @@ public final class ImageView extends JFrame {
     private BufferedImage renderCurrentView() {
         BufferedImage out = new BufferedImage(canvas.getWidth(), canvas.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g = out.createGraphics();
-        canvas.paint(g);
-        g.dispose();
+        canvas.suppressSelectionOverlay = true;
+        try {
+            canvas.paint(g);
+        } finally {
+            canvas.suppressSelectionOverlay = false;
+            g.dispose();
+        }
         return out;
     }
 
+    /**
+     * Loads the clipboard's current image as a new {@link #imageList}
+     * entry, inserted right after {@link #imageIndex} (truncating any
+     * later entries — same "new branch abandons the old redo tail" rule as
+     * a text editor's undo stack) and switched to, rather than overwriting
+     * whatever's currently on screen. Walter's own framing asking for this
+     * (2026-08-23): pasting a Copy'd selection was the only way to
+     * actually preview it outside the original image's outline, and the
+     * old overwrite-in-place behavior meant that preview step could
+     * accidentally clobber an image not yet saved — inserting a fresh
+     * entry instead makes Prev/Next a real undo/redo for paste-based
+     * previewing, and incidentally means a paste can no longer destroy
+     * anything.
+     */
     private void pasteFromClipboard() {
         Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
         Transferable content = clipboard.getContents(null);
@@ -1496,10 +1738,14 @@ public final class ImageView extends JFrame {
             Graphics2D g = buffered.createGraphics();
             g.drawImage(img, 0, 0, null);
             g.dispose();
-            canvas.setImage(buffered);
-            currentFile = null;
-            pasteTimeMillis = System.currentTimeMillis();
-            setBaseTitle(String.format("(clip) %tH:%<tM:%<tS.%<tL", pasteTimeMillis));
+            ImageEntry entry = new ImageEntry(buffered, System.currentTimeMillis());
+            int insertAt = imageIndex + 1;
+            while (imageList.size() > insertAt) {
+                imageList.remove(imageList.size() - 1);
+            }
+            imageList.add(entry);
+            imageIndex = insertAt;
+            showEntry(entry);
         } catch (UnsupportedFlavorException | IOException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Paste failed", JOptionPane.ERROR_MESSAGE);
         }
@@ -1510,7 +1756,7 @@ public final class ImageView extends JFrame {
             JOptionPane.showMessageDialog(this, "No image loaded", "Copy failed", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        final BufferedImage view = renderCurrentView();
+        final BufferedImage view = renderOutput();
         Transferable transferable = new Transferable() {
             @Override
             public DataFlavor[] getTransferDataFlavors() {
@@ -1555,6 +1801,11 @@ public final class ImageView extends JFrame {
 
     private static final class ImageCanvas extends JComponent {
 
+        /** Which selection tool (if any) is currently armed — see {@link #setSelectionMode}. */
+        private enum SelectionMode {
+            NONE, RECTANGLE, LASSO
+        }
+
         private BufferedImage source;
         private double zoom = 1.0;
         private double rotationDeg = 0.0;
@@ -1571,6 +1822,89 @@ public final class ImageView extends JFrame {
         private RotationListener rotationListener;
         /** Set by {@link ImageView#load} while the (blocking, on-EDT) file read is in flight, so {@link #paintComponent} can show a "Loading" placeholder — the only feedback available on a slow read (e.g. a NAS share) since the read itself isn't backgrounded. */
         private boolean loading = false;
+
+        /**
+         * Set around {@link ImageView#renderCurrentView}'s {@code
+         * canvas.paint(g)} call to suppress the selection overlay
+         * (rectangle/lasso outline, vertex markers, live guide) so it
+         * isn't baked into Save/Copy's output pixels — {@code paint(g)}
+         * calls the same {@link #paintComponent} the screen uses, which
+         * draws the overlay as ordinary paint-mode content (see "Selection
+         * outlines are paint-mode, not XOR" in this repo's CLAUDE.md), so
+         * without this flag it renders into the output exactly like it
+         * renders on screen. Confirmed as a real bug 2026-08-23: Walter
+         * pasted a Copy'd selection and the yellow rectangle outline came
+         * through baked into the pasted pixels, not just visible as a
+         * live overlay.
+         */
+        private boolean suppressSelectionOverlay = false;
+
+        /**
+         * The active selection tool, if any. Selection lives entirely in
+         * this component's own coordinate space (the same space {@link
+         * ImageView#renderCurrentView} rasterizes into) via an identity
+         * {@link PointMapper} — Save/Copy operate on the rendered view, not
+         * the raw {@link #source} pixels, so there is no need to map
+         * through the zoom/rotation/pan {@link AffineTransform} at all.
+         */
+        /** How close a click must land to the lasso's first vertex to close the polygon — also the radius drawn around that vertex, so the clickable zone is the visible target, not a guess. */
+        private static final int LASSO_CLOSE_TOLERANCE_PX = 10;
+        private SelectionMode selectionMode = SelectionMode.NONE;
+        private final VertexLasso vertexLasso = new VertexLasso(new IdentityPointMapper(), Color.YELLOW);
+        /** Set once {@link #selectionMode} is {@code RECTANGLE} and the drag completes with a non-empty rectangle — cleared by {@link #setSelectionMode}. */
+        private Rectangle committedRectangle;
+        /**
+         * Latest mouse position while the lasso has at least one vertex
+         * placed — driven by plain {@code mouseMoved} + {@code repaint()}
+         * rather than {@link RubberBandLine}'s XOR erase/redraw, because
+         * {@link #handleSelectionPress} already triggers a full (paint-mode)
+         * {@code repaint()} on every vertex click, which wipes out an XOR
+         * guide line without the erase call that was supposed to pair with
+         * it — confirmed as a real bug (2026-08-23, Walter: "Last vertex is
+         * not drawn and I have no preview"). Drawn as an ordinary segment
+         * in {@link #paintComponent} instead, alongside the placed
+         * segments and vertex markers, so it repaints correctly every time
+         * regardless of what else just repainted.
+         */
+        private Point lassoCursor;
+        /**
+         * Fixed corner of an in-progress rectangle drag, set on {@link
+         * #handleSelectionPress}, cleared on release/mode-change — same
+         * plain-paint-mode approach as {@link #lassoCursor}, replacing the
+         * vendored (now-removed) {@code RubberBandBox}'s XOR-mode live drag
+         * for the same "XOR against a dark source pixel doesn't reliably
+         * composite back to the chosen color" reason documented on
+         * {@link #drawLassoOverlay}.
+         */
+        private Point rectAnchor;
+        /** Moving corner of an in-progress rectangle drag — see {@link #rectAnchor}. */
+        private Point rectCursor;
+        /**
+         * Full-width/full-height XOR-mode crosshair through the cursor,
+         * active for the entire time Rectangle mode is armed — not just
+         * during a drag — as a ruler the human uses to see where they are
+         * relative to the image edges before clicking at all. Walter's
+         * explicit correction (2026-08-23) after the paint-mode drag
+         * rectangle alone shipped: "XOR cursor mode is a FULL across the
+         * entire image... should be active from the moment the Rectangle
+         * button is pressed." Unlike {@link #rectAnchor}/{@link
+         * #rectCursor} (which the paint-mode {@link #drawRectangleOverlay}
+         * draws fresh every {@link #paintComponent}), this one genuinely
+         * uses {@link Graphics2D#setXORMode} erase/redraw via {@code
+         * getGraphics()} outside the normal paint cycle — it's the one
+         * place in this feature where XOR mode is the actual right tool
+         * (a per-pixel-move guide too cheap to justify a full repaint),
+         * not a stand-in for the selection outline itself.
+         */
+        private Point crosshairPos;
+
+        private static final class IdentityPointMapper implements PointMapper {
+
+            @Override
+            public Point toComponent(Point sourcePoint) {
+                return sourcePoint;
+            }
+        }
 
         ImageCanvas() {
             setBackground(Color.DARK_GRAY);
@@ -1594,13 +1928,53 @@ public final class ImageView extends JFrame {
             addMouseListener(new MouseAdapter() {
                 @Override
                 public void mousePressed(MouseEvent e) {
+                    if (SelectionMode.NONE != selectionMode) {
+                        handleSelectionPress(e);
+                        return;
+                    }
                     dragLastX = e.getX();
                     dragLastY = e.getY();
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    if (SelectionMode.RECTANGLE == selectionMode) {
+                        handleRectangleRelease(e);
+                    }
+                }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    if (SelectionMode.RECTANGLE == selectionMode) {
+                        eraseCrosshair();
+                    }
                 }
             });
             addMouseMotionListener(new MouseMotionAdapter() {
                 @Override
                 public void mouseDragged(MouseEvent e) {
+                    if (SelectionMode.RECTANGLE == selectionMode) {
+                        if (null != rectAnchor) {
+                            rectCursor = e.getPoint();
+                            // The drag rectangle's paint-mode repaint changes the
+                            // pixels underneath crosshairPos's last XOR draw
+                            // without erasing it first (paintComponent doesn't
+                            // know about XOR content) — force that repaint to
+                            // happen synchronously right here, then treat the
+                            // crosshair as already erased (it visually was, by
+                            // the repaint overwriting it) so updateCrosshair only
+                            // draws fresh against current pixels instead of
+                            // XOR-erasing against content that no longer matches
+                            // what it drew onto.
+                            paintImmediately(0, 0, getWidth(), getHeight());
+                            crosshairPos = null;
+                        }
+                        updateCrosshair(e.getPoint());
+                        return;
+                    }
+                    if (SelectionMode.NONE != selectionMode) {
+                        return;
+                    }
                     int dx = e.getX() - dragLastX;
                     int dy = e.getY() - dragLastY;
                     double rad = -Math.toRadians(rotationDeg);
@@ -1612,7 +1986,239 @@ public final class ImageView extends JFrame {
                     dragLastY = e.getY();
                     repaint();
                 }
+
+                @Override
+                public void mouseMoved(MouseEvent e) {
+                    if (SelectionMode.LASSO == selectionMode && !vertexLasso.getVertices().isEmpty()) {
+                        lassoCursor = e.getPoint();
+                        repaint();
+                    }
+                    if (SelectionMode.RECTANGLE == selectionMode) {
+                        updateCrosshair(e.getPoint());
+                    }
+                }
             });
+        }
+
+        /**
+         * Arms {@code mode} (or disarms with {@code NONE}), always starting
+         * that tool fresh — this is both the initial-arm path and the
+         * "toggle off then on again" reset gesture's target, since either
+         * way the caller wants a clean tool. Clears any previously
+         * committed selection too: switching tools (or turning the current
+         * one off) abandons whatever was selected, matching how the
+         * toolbar buttons read as "the selection currently in effect," not
+         * a separately-persisted clip.
+         */
+        void setSelectionMode(SelectionMode mode) {
+            clearSelection();
+            selectionMode = mode;
+            setCursor(java.awt.Cursor.getPredefinedCursor(
+                    SelectionMode.NONE == mode ? java.awt.Cursor.DEFAULT_CURSOR : java.awt.Cursor.CROSSHAIR_CURSOR));
+            repaint();
+        }
+
+        /**
+         * Clears any in-progress or committed selection state, without
+         * touching {@link #selectionMode} itself — shared by {@link
+         * #setSelectionMode} (switching/disarming a tool abandons whatever
+         * was selected) and {@link #setImage} (a selection's coordinates
+         * are meaningless once the underlying picture changes; without
+         * this a stale {@link #committedRectangle}/lasso polygon from the
+         * previous image kept being drawn against the new one — confirmed
+         * as a real bug 2026-08-23: Walter pasted a Copy'd selection and
+         * saw the old rectangle outline floating in empty space next to
+         * the new, differently-sized pasted image).
+         */
+        private void clearSelection() {
+            eraseCrosshair();
+            rectAnchor = null;
+            rectCursor = null;
+            vertexLasso.reset();
+            committedRectangle = null;
+            lassoCursor = null;
+        }
+
+        /**
+         * @return a mask sized to this component's current width/height for
+         * the committed selection (a completed rectangle drag, or a closed
+         * lasso polygon), or {@code null} if no selection is currently
+         * committed — the state {@link ImageView#renderOutput} checks to
+         * decide whether Save/Copy crop to a selection or use the full view.
+         */
+        BitSet2D getCommittedSelectionMask() {
+            if (SelectionMode.RECTANGLE == selectionMode && null != committedRectangle) {
+                return SelectionMasks.fromRectangle(committedRectangle, getWidth(), getHeight());
+            }
+            if (SelectionMode.LASSO == selectionMode && vertexLasso.isClosed()) {
+                return SelectionMasks.fromPolygon(vertexLasso.getVertices(), getWidth(), getHeight());
+            }
+            return null;
+        }
+
+        /**
+         * Draws the lasso's placed segments (plus, once {@link
+         * VertexLasso#isClosed}, the closing segment back to the first
+         * vertex — {@link VertexLasso#drawPlacedSegments} deliberately
+         * never draws that edge itself, see its own doc, so this canvas
+         * has to add it explicitly or a closed polygon visually looks
+         * unclosed even though {@link SelectionMasks#fromPolygon} already
+         * treats it as implied), a small filled dot at every vertex, a
+         * hollow ring around the first vertex sized to exactly {@link
+         * #LASSO_CLOSE_TOLERANCE_PX} (that hit radius has no marker of its
+         * own otherwise), and the live guide segment to {@link
+         * #lassoCursor}. All plain paint-mode drawing, not {@link
+         * nl.infcomtec.selection.XorDrawing}'s XOR mode — XOR against a
+         * dark source pixel doesn't reliably composite back to the chosen
+         * color (confirmed 2026-08-23: Walter's yellow XOR segments turned
+         * near-invisible blue against the dark truck in his real test
+         * image), so this canvas draws its own selection overlay fresh
+         * every frame instead of using {@link VertexLasso#drawPlacedSegments}
+         * /{@code updateCursor}.
+         */
+        private void drawLassoOverlay(Graphics2D g) {
+            List<Point> vertices = vertexLasso.getVertices();
+            if (vertices.isEmpty()) {
+                return;
+            }
+            g.setColor(Color.YELLOW);
+            for (int i = 1; i < vertices.size(); i++) {
+                Point a = vertices.get(i - 1);
+                Point b = vertices.get(i);
+                g.drawLine(a.x, a.y, b.x, b.y);
+            }
+            if (vertexLasso.isClosed() && vertices.size() >= 3) {
+                Point last = vertices.get(vertices.size() - 1);
+                Point first = vertices.get(0);
+                g.drawLine(last.x, last.y, first.x, first.y);
+            }
+            for (Point p : vertices) {
+                g.fillOval(p.x - 3, p.y - 3, 6, 6);
+            }
+            if (!vertexLasso.isClosed() && vertices.size() >= 3) {
+                Point first = vertices.get(0);
+                g.drawOval(first.x - LASSO_CLOSE_TOLERANCE_PX, first.y - LASSO_CLOSE_TOLERANCE_PX,
+                        LASSO_CLOSE_TOLERANCE_PX * 2, LASSO_CLOSE_TOLERANCE_PX * 2);
+            }
+            if (!vertexLasso.isClosed() && null != lassoCursor) {
+                Point last = vertices.get(vertices.size() - 1);
+                g.drawLine(last.x, last.y, lassoCursor.x, lassoCursor.y);
+            }
+        }
+
+        /**
+         * Draws the live drag rectangle (between {@link #rectAnchor} and
+         * {@link #rectCursor}, while dragging) and the committed rectangle
+         * (once {@link #committedRectangle} is set, after release) — same
+         * plain-paint-mode treatment as {@link #drawLassoOverlay}, and same
+         * reasoning: rectangle is the degenerate case of the lasso, so it
+         * gets the same persistent-outline-after-commit and same
+         * always-visible-regardless-of-background behavior, not a
+         * different visual language just because it's a different tool.
+         */
+        private void drawRectangleOverlay(Graphics2D g) {
+            g.setColor(Color.YELLOW);
+            if (null != rectAnchor && null != rectCursor) {
+                Rectangle live = normalizedRect(rectAnchor, rectCursor);
+                g.drawRect(live.x, live.y, live.width, live.height);
+            }
+            if (null != committedRectangle) {
+                g.drawRect(committedRectangle.x, committedRectangle.y, committedRectangle.width, committedRectangle.height);
+            }
+        }
+
+        /**
+         * Moves the full-width/full-height XOR ruler crosshair to {@code
+         * p}: erases the previous position (if any) and draws the new one,
+         * both via the same {@link Graphics2D} so the XOR erase pairs
+         * correctly with its matching draw — see {@link #crosshairPos}.
+         */
+        private void updateCrosshair(Point p) {
+            Graphics2D g = (Graphics2D) getGraphics();
+            if (null == g) {
+                // Not currently displayable (e.g. minimized) — nothing was
+                // actually drawn, so don't update crosshairPos to claim
+                // otherwise; the next real repaint (on restore) starts
+                // paintComponent fresh with no XOR content to reconcile.
+                return;
+            }
+            if (null != crosshairPos) {
+                drawCrosshairAt(g, crosshairPos);
+            }
+            drawCrosshairAt(g, p);
+            g.dispose();
+            crosshairPos = p;
+        }
+
+        /** Erases the ruler crosshair if one is currently drawn — see {@link #crosshairPos}. */
+        private void eraseCrosshair() {
+            if (null == crosshairPos) {
+                return;
+            }
+            Graphics2D g = (Graphics2D) getGraphics();
+            if (null == g) {
+                crosshairPos = null;
+                return;
+            }
+            drawCrosshairAt(g, crosshairPos);
+            g.dispose();
+            crosshairPos = null;
+        }
+
+        private void drawCrosshairAt(Graphics2D g, Point p) {
+            g.setXORMode(Color.WHITE);
+            g.setColor(Color.YELLOW);
+            g.drawLine(0, p.y, getWidth(), p.y);
+            g.drawLine(p.x, 0, p.x, getHeight());
+            g.setPaintMode();
+        }
+
+        private void handleSelectionPress(MouseEvent e) {
+            Point p = e.getPoint();
+            if (SelectionMode.RECTANGLE == selectionMode) {
+                committedRectangle = null;
+                rectAnchor = p;
+                rectCursor = p;
+                paintImmediately(0, 0, getWidth(), getHeight());
+                crosshairPos = null;
+                updateCrosshair(p);
+                return;
+            }
+            if (SelectionMode.LASSO == selectionMode) {
+                if (vertexLasso.isClosed()) {
+                    vertexLasso.reset();
+                    lassoCursor = null;
+                }
+                if (MouseEvent.BUTTON3 == e.getButton()) {
+                    vertexLasso.undoLastVertex();
+                } else if (!vertexLasso.tryClose(p, LASSO_CLOSE_TOLERANCE_PX)) {
+                    vertexLasso.addVertex(p);
+                }
+                repaint();
+            }
+        }
+
+        private void handleRectangleRelease(MouseEvent e) {
+            if (null == rectAnchor) {
+                return;
+            }
+            Rectangle r = normalizedRect(rectAnchor, e.getPoint());
+            rectAnchor = null;
+            rectCursor = null;
+            if (r.width > 0 && r.height > 0) {
+                committedRectangle = r;
+            }
+            paintImmediately(0, 0, getWidth(), getHeight());
+            crosshairPos = null;
+            updateCrosshair(e.getPoint());
+        }
+
+        private static Rectangle normalizedRect(Point a, Point b) {
+            int x = Math.min(a.x, b.x);
+            int y = Math.min(a.y, b.y);
+            int w = Math.abs(a.x - b.x);
+            int h = Math.abs(a.y - b.y);
+            return new Rectangle(x, y, w, h);
         }
 
         void setImage(BufferedImage img) {
@@ -1631,6 +2237,7 @@ public final class ImageView extends JFrame {
             rotationDeg = initialDeg;
             flipH = false;
             flipV = false;
+            clearSelection();
             fireRotationChanged();
             fitToWindow();
         }
@@ -1738,6 +2345,12 @@ public final class ImageView extends JFrame {
             at.scale(zoom, zoom);
             at.translate(-source.getWidth() / 2.0 + panX, -source.getHeight() / 2.0 + panY);
             g2.drawImage(source, at, null);
+            if (!suppressSelectionOverlay && SelectionMode.LASSO == selectionMode) {
+                drawLassoOverlay(g2);
+            }
+            if (!suppressSelectionOverlay && SelectionMode.RECTANGLE == selectionMode) {
+                drawRectangleOverlay(g2);
+            }
         }
 
         /** Draws "Loading" centered in a big font over the (cleared) canvas — the only progress feedback available for a slow, on-EDT file read (e.g. a NAS share over CIFS), since that read isn't backgrounded. */

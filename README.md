@@ -28,7 +28,16 @@ at an image and maybe straighten it."
 
 - Fit-to-window, mouse-wheel zoom, arbitrary-angle rotate, click-drag pan.
 - Load/Save/Paste/Copy, plus a recent-files dropdown and Prev/Next through
-  files given on the command line.
+  a single shared, mutable image list — every load and every paste is its
+  own entry (Save updates that entry to point at wherever it's written),
+  so stepping back and forth never loses or overwrites anything.
+- **Rectangle** and **Lasso** selection tools — Save/Copy act on the
+  selection (cropped to its bounds) instead of the full view once one's
+  committed; a live XOR crosshair ruler helps place the rectangle's first
+  corner precisely.
+- A full-toolbar icon set (recommended: a dark FlatLaf theme — see
+  **Look & Feel** in [MANUAL.md](MANUAL.md), the icons are designed
+  light-on-dark and read best that way).
 - A **Menu** button for everything else: quick 90°/180°/270° rotate and
   flip, window-position slots, look-and-feel, one-click brightness/contrast
   nudges, a Pixel Microscope for inspecting individual pixel colours, and a
@@ -48,7 +57,7 @@ once, then `mitsa add infimg Walter-Stroebel infimg` gets you a working
 
 ```bash
 mvn package
-java -jar target/infimg-1.9-jar-with-dependencies.jar [-0..-9] [optional-image-file]
+java -jar target/infimg-1.10-jar-with-dependencies.jar [-0..-9] [optional-image-file]
 ```
 
 ## Dependencies
